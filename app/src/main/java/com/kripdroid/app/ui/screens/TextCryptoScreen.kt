@@ -43,7 +43,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -79,6 +78,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun TextCryptoScreen(
     onRequestMasterPasswordDialog: (onSuccess: (String) -> Unit) -> Unit,
+    onTriggerBiometrics: (onSuccess: (String) -> Unit) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -100,6 +100,83 @@ fun TextCryptoScreen(
     var statusMessage by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
 
+    fun executeEncrypt(effectiveKey: String) {
+        if (inputText.isEmpty()) {
+            statusMessage = "Teks masukan tidak boleh kosong"
+            isError = true
+            return
+        }
+        if (selectedAlgo.needsKey && effectiveKey.isEmpty()) {
+            statusMessage = "Kunci/Kata sandi enkripsi tidak boleh kosong!"
+            isError = true
+            return
+        }
+
+        isProcessing = true
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val (enc, usedIv) = CryptoEngine.encryptText(
+                    algoId = selectedAlgo.id,
+                    plainText = inputText,
+                    keyStr = effectiveKey,
+                    ivStr = ivText
+                )
+                withContext(Dispatchers.Main) {
+                    outputText = enc
+                    if (usedIv.isNotEmpty()) {
+                        ivText = usedIv
+                    }
+                    statusMessage = "Enkripsi berhasil diselesaikan (${selectedAlgo.name})"
+                    isError = false
+                    isProcessing = false
+                }
+            } catch (e: Throwable) {
+                withContext(Dispatchers.Main) {
+                    statusMessage = "Gagal Enkripsi: ${e.message}"
+                    isError = true
+                    isProcessing = false
+                }
+            }
+        }
+    }
+
+    fun executeDecrypt(effectiveKey: String) {
+        if (inputText.isEmpty()) {
+            statusMessage = "Teks ciphertext tidak boleh kosong"
+            isError = true
+            return
+        }
+        if (selectedAlgo.needsKey && effectiveKey.isEmpty()) {
+            statusMessage = "Kunci/Kata sandi dekripsi tidak boleh kosong!"
+            isError = true
+            return
+        }
+
+        isProcessing = true
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val dec = CryptoEngine.decryptText(
+                    algoId = selectedAlgo.id,
+                    cipherText = inputText,
+                    keyStr = effectiveKey,
+                    ivStr = ivText
+                )
+                withContext(Dispatchers.Main) {
+                    outputText = dec
+                    statusMessage = "Dekripsi berhasil diselesaikan (${selectedAlgo.name})"
+                    isError = false
+                    isProcessing = false
+                }
+            } catch (e: Throwable) {
+                withContext(Dispatchers.Main) {
+                    statusMessage = "Gagal Dekripsi: ${e.message}"
+                    isError = true
+                    isProcessing = false
+                }
+            }
+        }
+    }
+
     val scrollState = rememberScrollState()
 
     Column(
@@ -113,7 +190,7 @@ fun TextCryptoScreen(
     ) {
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Algorithm Selector Tabs / Horizontal scroll
+        // Algorithm Selector
         SectionTitle(title = "PILIH ALGORITMA KRIPTOGRAFI")
         Row(
             modifier = Modifier
@@ -171,52 +248,127 @@ fun TextCryptoScreen(
         // Key Input Field (if needed)
         if (selectedAlgo.needsKey) {
             SectionTitle(title = "KUNCI RAHASIA / KATA SANDI")
-            OutlinedTextField(
-                value = if (useDeviceKey) KeystoreManager.DEVICE_KEY_SENTINEL else keyText,
-                onValueChange = {
-                    if (!useDeviceKey) {
-                        keyText = it
-                        statusMessage = ""
-                    }
-                },
-                readOnly = useDeviceKey,
-                label = { Text(selectedAlgo.keyDescription) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                visualTransformation = if (isKeyMasked && !useDeviceKey) PasswordVisualTransformation() else VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = if (isKeyMasked) KeyboardType.Password else KeyboardType.Text
-                ),
-                leadingIcon = {
-                    IconButton(onClick = {
-                        if (useDeviceKey) {
-                            useDeviceKey = false
-                            keyText = ""
-                        } else {
-                            onRequestMasterPasswordDialog { key ->
-                                keyText = key
-                                useDeviceKey = true
-                                statusMessage = "Kunci Perangkat (Android Keystore) diaktifkan"
-                                isError = false
+
+            if (useDeviceKey) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Fingerprint,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(26.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    "Kunci Biometrik / Android KeyStore",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    "Aman terlindungi hardware chip keystore",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
                             }
                         }
-                    }) {
-                        Icon(
-                            imageVector = if (useDeviceKey) Icons.Default.Fingerprint else Icons.Default.Lock,
-                            contentDescription = "Kunci Perangkat",
-                            tint = if (useDeviceKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                trailingIcon = {
-                    IconButton(onClick = { isKeyMasked = !isKeyMasked }) {
-                        Icon(
-                            imageVector = if (isKeyMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = "Toggle Mask"
-                        )
+                        OutlinedButton(
+                            onClick = {
+                                useDeviceKey = false
+                                keyText = ""
+                            }
+                        ) {
+                            Text("Manual", fontSize = 11.sp)
+                        }
                     }
                 }
-            )
+            } else {
+                OutlinedTextField(
+                    value = keyText,
+                    onValueChange = {
+                        keyText = it
+                        statusMessage = ""
+                    },
+                    label = { Text(selectedAlgo.keyDescription) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = if (isKeyMasked) PasswordVisualTransformation() else VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (isKeyMasked) KeyboardType.Password else KeyboardType.Text
+                    ),
+                    trailingIcon = {
+                        IconButton(onClick = { isKeyMasked = !isKeyMasked }) {
+                            Icon(
+                                imageVector = if (isKeyMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = "Toggle Mask"
+                            )
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            onRequestMasterPasswordDialog { key ->
+                                keyText = key
+                                useDeviceKey = false
+                                statusMessage = "Kata sandi master diterapkan"
+                                isError = false
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Master Password", fontSize = 11.sp, maxLines = 1)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            onTriggerBiometrics { _ ->
+                                useDeviceKey = true
+                                keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                                statusMessage = "Kunci Biometrik (Android KeyStore) diaktifkan"
+                                isError = false
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fingerprint,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Kunci Biometrik", fontSize = 11.sp, maxLines = 1)
+                    }
+                }
+            }
         }
 
         // Advanced IV Toggle
@@ -278,7 +430,7 @@ fun TextCryptoScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Sedang memproses kriptografi (Argon2id derivation)...",
+                        text = "Memproses Argon2id & Kriptografi (${selectedAlgo.name})...",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -286,49 +438,20 @@ fun TextCryptoScreen(
             }
         }
 
-        // Action Buttons Row (Responsive)
+        // Action Buttons Row: Standard Manual Buttons
+        SectionTitle(title = "AKSI KRIPTOGRAFI TEKS")
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
                 onClick = {
-                    if (inputText.isEmpty()) {
-                        statusMessage = "Teks masukan tidak boleh kosong"
-                        isError = true
-                        return@Button
+                    val effectiveKey = if (useDeviceKey) {
+                        KeystoreManager.resolveEffectiveKey(context, keyText)
+                    } else {
+                        keyText
                     }
-                    isProcessing = true
-                    coroutineScope.launch(Dispatchers.IO) {
-                        try {
-                            val effectiveKey = if (useDeviceKey) {
-                                KeystoreManager.resolveEffectiveKey(context, keyText)
-                            } else {
-                                keyText
-                            }
-                            val (enc, usedIv) = CryptoEngine.encryptText(
-                                algoId = selectedAlgo.id,
-                                plainText = inputText,
-                                keyStr = effectiveKey,
-                                ivStr = ivText
-                            )
-                            withContext(Dispatchers.Main) {
-                                outputText = enc
-                                if (usedIv.isNotEmpty()) {
-                                    ivText = usedIv
-                                }
-                                statusMessage = "Enkripsi berhasil diselesaikan (${selectedAlgo.name})"
-                                isError = false
-                                isProcessing = false
-                            }
-                        } catch (e: Throwable) {
-                            withContext(Dispatchers.Main) {
-                                statusMessage = "Gagal Enkripsi: ${e.message}"
-                                isError = true
-                                isProcessing = false
-                            }
-                        }
-                    }
+                    executeEncrypt(effectiveKey)
                 },
                 enabled = !isProcessing,
                 modifier = Modifier.weight(1f)
@@ -340,39 +463,12 @@ fun TextCryptoScreen(
 
             Button(
                 onClick = {
-                    if (inputText.isEmpty()) {
-                        statusMessage = "Teks ciphertext tidak boleh kosong"
-                        isError = true
-                        return@Button
+                    val effectiveKey = if (useDeviceKey) {
+                        KeystoreManager.resolveEffectiveKey(context, keyText)
+                    } else {
+                        keyText
                     }
-                    isProcessing = true
-                    coroutineScope.launch(Dispatchers.IO) {
-                        try {
-                            val effectiveKey = if (useDeviceKey) {
-                                KeystoreManager.resolveEffectiveKey(context, keyText)
-                            } else {
-                                keyText
-                            }
-                            val dec = CryptoEngine.decryptText(
-                                algoId = selectedAlgo.id,
-                                cipherText = inputText,
-                                keyStr = effectiveKey,
-                                ivStr = ivText
-                            )
-                            withContext(Dispatchers.Main) {
-                                outputText = dec
-                                statusMessage = "Dekripsi berhasil diselesaikan (${selectedAlgo.name})"
-                                isError = false
-                                isProcessing = false
-                            }
-                        } catch (e: Throwable) {
-                            withContext(Dispatchers.Main) {
-                                statusMessage = "Gagal Dekripsi: ${e.message}"
-                                isError = true
-                                isProcessing = false
-                            }
-                        }
-                    }
+                    executeDecrypt(effectiveKey)
                 },
                 enabled = !isProcessing,
                 modifier = Modifier.weight(1f),
@@ -387,7 +483,63 @@ fun TextCryptoScreen(
             }
         }
 
-        // Secondary Action Buttons Row (Responsive)
+        // Dedicated Biometric Action Buttons (User requested: "tombol enkripsi dekripsi pakai kunci biometrik")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    if (inputText.isEmpty()) {
+                        statusMessage = "Teks masukan tidak boleh kosong"
+                        isError = true
+                        return@Button
+                    }
+                    onTriggerBiometrics { hwKey ->
+                        useDeviceKey = true
+                        keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                        executeEncrypt(hwKey)
+                    }
+                },
+                enabled = !isProcessing,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary
+                )
+            ) {
+                Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Enkripsi (Biometrik)", fontSize = 11.sp, maxLines = 1)
+            }
+
+            Button(
+                onClick = {
+                    if (inputText.isEmpty()) {
+                        statusMessage = "Teks masukan (ciphertext) tidak boleh kosong"
+                        isError = true
+                        return@Button
+                    }
+                    onTriggerBiometrics { hwKey ->
+                        useDeviceKey = true
+                        keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                        executeDecrypt(hwKey)
+                    }
+                },
+                enabled = !isProcessing,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            ) {
+                Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Dekripsi (Biometrik)", fontSize = 11.sp, maxLines = 1)
+            }
+        }
+
+        // Secondary Utility Buttons Row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -434,16 +586,16 @@ fun TextCryptoScreen(
             }
         }
 
-        // Status Message
+        // Status Banner
         StatusBanner(message = statusMessage, isError = isError)
 
-        // Output Result Field
+        // Output Result Card
         SectionTitle(title = "HASIL KELUARAN")
         OutlinedTextField(
             value = outputText,
-            onValueChange = {},
+            onValueChange = { outputText = it },
             readOnly = true,
-            label = { Text("Ciphertext / Teks Hasil") },
+            label = { Text("Hasil Enkripsi / Dekripsi") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(130.dp),

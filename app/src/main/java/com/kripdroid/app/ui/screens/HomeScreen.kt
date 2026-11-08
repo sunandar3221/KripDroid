@@ -97,7 +97,9 @@ fun HomeScreen() {
                     }
                 )
             } else {
-                Toast.makeText(context, "Perangkat belum mengaktifkan kunci layar / biometrik", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Biometrik belum diaktifkan di sistem. Silakan gunakan Master Password.", Toast.LENGTH_LONG).show()
+                pendingMasterKeyCallback = onSuccess
+                showMasterPassDialog = true
             }
         } else {
             Toast.makeText(context, "Tidak dapat mengakses aktivitas sistem", Toast.LENGTH_SHORT).show()
@@ -333,12 +335,18 @@ fun HomeScreen() {
                         onRequestMasterPasswordDialog = { callback ->
                             pendingMasterKeyCallback = callback
                             showMasterPassDialog = true
+                        },
+                        onTriggerBiometrics = { callback ->
+                            triggerBiometrics(callback)
                         }
                     )
                     2 -> FileCryptoScreen(
                         onRequestMasterPasswordDialog = { callback ->
                             pendingMasterKeyCallback = callback
                             showMasterPassDialog = true
+                        },
+                        onTriggerBiometrics = { callback ->
+                            triggerBiometrics(callback)
                         }
                     )
                     3 -> SettingsScreen(

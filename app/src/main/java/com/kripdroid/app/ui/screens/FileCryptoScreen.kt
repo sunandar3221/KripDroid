@@ -2,9 +2,13 @@ package com.kripdroid.app.ui.screens
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -14,7 +18,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,8 +33,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
@@ -89,6 +92,7 @@ import java.io.FileInputStream
 @Composable
 fun FileCryptoScreen(
     onRequestMasterPasswordDialog: (onSuccess: (String) -> Unit) -> Unit,
+    onTriggerBiometrics: (onSuccess: (String) -> Unit) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -115,11 +119,7 @@ fun FileCryptoScreen(
     var statusMessage by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
 
-    // Resilient file picker using GetContent (compatible with 100% of Android devices)
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    fun handleSelectedUri(uri: Uri) {
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 var name = "file_${System.currentTimeMillis()}"
@@ -170,6 +170,54 @@ fun FileCryptoScreen(
         }
     }
 
+    // Universal File Picker with cascading fallback
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data ?: result.data?.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+        if (uri != null) {
+            handleSelectedUri(uri)
+        }
+    }
+
+    fun openUniversalFilePicker() {
+        val openDocIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
+        }
+        val getContentIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        val plainContentIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "*/*"
+        }
+        val chooserIntent = Intent.createChooser(openDocIntent, "Pilih File").apply {
+            putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(getContentIntent, plainContentIntent))
+        }
+
+        var launched = false
+        val attempts = listOf(
+            { filePickerLauncher.launch(chooserIntent) },
+            { filePickerLauncher.launch(openDocIntent) },
+            { filePickerLauncher.launch(getContentIntent) },
+            { filePickerLauncher.launch(plainContentIntent) },
+            { filePickerLauncher.launch(Intent.createChooser(plainContentIntent, "Pilih File")) }
+        )
+        for (attempt in attempts) {
+            try {
+                attempt()
+                launched = true
+                break
+            } catch (_: Throwable) {}
+        }
+        if (!launched) {
+            statusMessage = "Gagal membuka pemilih berkas: Aplikasi pengelola berkas tidak ditemukan di sistem ini."
+            isError = true
+        }
+    }
+
     val saveFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("*/*")
     ) { saveUri: Uri? ->
@@ -195,6 +243,119 @@ fun FileCryptoScreen(
                             isError = true
                         }
                     }
+                }
+            }
+        }
+    }
+
+    fun executeFileEncrypt(effectiveKey: String) {
+        val uri = loadedUri
+        if (uri == null) {
+            statusMessage = "Pilih file terlebih dahulu!"
+            isError = true
+            return
+        }
+        if (selectedAlgo.needsKey && effectiveKey.isEmpty()) {
+            statusMessage = "Kunci/Kata sandi enkripsi tidak boleh kosong!"
+            isError = true
+            return
+        }
+
+        isProcessing = true
+        progress = 0.05f
+        progressStatusText = "Mempersiapkan enkripsi..."
+
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val dotIndex = loadedFileName.lastIndexOf('.')
+                val ext = if (dotIndex != -1) loadedFileName.substring(dotIndex) else ""
+                val tempOut = File(context.cacheDir, "krip_encrypted_${System.currentTimeMillis()}.krip")
+
+                val result = FileCrypto.processUriEncrypt(
+                    context = context,
+                    inputUri = uri,
+                    outputFile = tempOut,
+                    algoId = selectedAlgo.id,
+                    keyStr = effectiveKey,
+                    customIv = null,
+                    originalExt = ext
+                ) { prog, status ->
+                    progress = prog
+                    progressStatusText = status
+                }
+
+                withContext(Dispatchers.Main) {
+                    isProcessing = false
+                    processedOutputFile = tempOut
+                    processedResult = result
+                    suggestedExportFileName = "$loadedFileName.krip"
+                    statusMessage = "Enkripsi Selesai! Ukuran hasil: ${formatSize(tempOut.length())} (${result.durationMs} ms)"
+                    isError = false
+                }
+            } catch (e: Throwable) {
+                withContext(Dispatchers.Main) {
+                    isProcessing = false
+                    statusMessage = "Gagal Enkripsi File: ${e.message}"
+                    isError = true
+                }
+            }
+        }
+    }
+
+    fun executeFileDecrypt(effectiveKey: String) {
+        val uri = loadedUri
+        if (uri == null) {
+            statusMessage = "Pilih file terenkripsi terlebih dahulu!"
+            isError = true
+            return
+        }
+        if (selectedAlgo.needsKey && effectiveKey.isEmpty()) {
+            statusMessage = "Kunci/Kata sandi dekripsi tidak boleh kosong!"
+            isError = true
+            return
+        }
+
+        isProcessing = true
+        progress = 0.05f
+        progressStatusText = "Mempersiapkan dekripsi..."
+
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val tempOut = File(context.cacheDir, "krip_decrypted_${System.currentTimeMillis()}.bin")
+
+                val result = FileCrypto.processUriDecrypt(
+                    context = context,
+                    inputUri = uri,
+                    outputFile = tempOut,
+                    keyStr = effectiveKey,
+                    fallbackAlgoId = selectedAlgo.id
+                ) { prog, status ->
+                    progress = prog
+                    progressStatusText = status
+                }
+
+                val recoveredExt = result.originalExt
+                val baseName = loadedFileName.removeSuffix(".krip")
+                val exportName = if (recoveredExt.isNotEmpty()) {
+                    if (baseName.endsWith(recoveredExt)) baseName else "$baseName$recoveredExt"
+                } else {
+                    if (loadedFileName.endsWith(".krip")) baseName else "$loadedFileName.dec"
+                }
+
+                withContext(Dispatchers.Main) {
+                    isProcessing = false
+                    processedOutputFile = tempOut
+                    processedResult = result
+                    suggestedExportFileName = exportName
+                    val extNotice = if (recoveredExt.isNotEmpty()) " (Ekstensi: $recoveredExt)" else ""
+                    statusMessage = "Dekripsi Selesai!$extNotice Ukuran: ${formatSize(tempOut.length())} (${result.durationMs} ms)"
+                    isError = false
+                }
+            } catch (e: Throwable) {
+                withContext(Dispatchers.Main) {
+                    isProcessing = false
+                    statusMessage = "Gagal Dekripsi File: ${e.message}"
+                    isError = true
                 }
             }
         }
@@ -241,16 +402,9 @@ fun FileCryptoScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
-                        onClick = {
-                            try {
-                                filePickerLauncher.launch("*/*")
-                            } catch (_: Throwable) {
-                                statusMessage = "Tidak dapat membuka pemilih file di perangkat ini"
-                                isError = true
-                            }
-                        },
+                        onClick = { openUniversalFilePicker() },
                         enabled = !isProcessing,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1.2f)
                     ) {
                         Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -320,55 +474,130 @@ fun FileCryptoScreen(
 
         AlgorithmInfoCard(algo = selectedAlgo)
 
-        // Key Input Field
+        // Key Input & Biometric Selector
         if (selectedAlgo.needsKey) {
             SectionTitle(title = "KUNCI RAHASIA / KATA SANDI")
-            OutlinedTextField(
-                value = if (useDeviceKey) KeystoreManager.DEVICE_KEY_SENTINEL else keyText,
-                onValueChange = {
-                    if (!useDeviceKey) {
-                        keyText = it
-                        statusMessage = ""
-                    }
-                },
-                readOnly = useDeviceKey,
-                label = { Text(selectedAlgo.keyDescription) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                visualTransformation = if (isKeyMasked && !useDeviceKey) PasswordVisualTransformation() else VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = if (isKeyMasked) KeyboardType.Password else KeyboardType.Text
-                ),
-                leadingIcon = {
-                    IconButton(onClick = {
-                        if (useDeviceKey) {
-                            useDeviceKey = false
-                            keyText = ""
-                        } else {
-                            onRequestMasterPasswordDialog { key ->
-                                keyText = key
-                                useDeviceKey = true
-                                statusMessage = "Kunci Perangkat (Android Keystore) diaktifkan"
-                                isError = false
+
+            if (useDeviceKey) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Fingerprint,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(26.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    "Kunci Biometrik / Android KeyStore",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    "Aman terlindungi hardware chip keystore",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
                             }
                         }
-                    }) {
-                        Icon(
-                            imageVector = if (useDeviceKey) Icons.Default.Fingerprint else Icons.Default.Lock,
-                            contentDescription = "Kunci Perangkat",
-                            tint = if (useDeviceKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                trailingIcon = {
-                    IconButton(onClick = { isKeyMasked = !isKeyMasked }) {
-                        Icon(
-                            imageVector = if (isKeyMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = "Toggle Mask"
-                        )
+                        OutlinedButton(
+                            onClick = {
+                                useDeviceKey = false
+                                keyText = ""
+                            }
+                        ) {
+                            Text("Manual", fontSize = 11.sp)
+                        }
                     }
                 }
-            )
+            } else {
+                OutlinedTextField(
+                    value = keyText,
+                    onValueChange = {
+                        keyText = it
+                        statusMessage = ""
+                    },
+                    label = { Text(selectedAlgo.keyDescription) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = if (isKeyMasked) PasswordVisualTransformation() else VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (isKeyMasked) KeyboardType.Password else KeyboardType.Text
+                    ),
+                    trailingIcon = {
+                        IconButton(onClick = { isKeyMasked = !isKeyMasked }) {
+                            Icon(
+                                imageVector = if (isKeyMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = "Toggle Mask"
+                            )
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            onRequestMasterPasswordDialog { key ->
+                                keyText = key
+                                useDeviceKey = false
+                                statusMessage = "Kata sandi master diterapkan"
+                                isError = false
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Master Password", fontSize = 11.sp, maxLines = 1)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            onTriggerBiometrics { _ ->
+                                useDeviceKey = true
+                                keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                                statusMessage = "Kunci Biometrik (Android KeyStore) diaktifkan"
+                                isError = false
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fingerprint,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Kunci Biometrik", fontSize = 11.sp, maxLines = 1)
+                    }
+                }
+            }
         }
 
         // Dedicated Granular Progress Bar Card
@@ -415,7 +644,52 @@ fun FileCryptoScreen(
             }
         }
 
-        // Action Buttons Row (Responsive)
+        // Action Buttons Row: Standard Manual Buttons
+        SectionTitle(title = "AKSI KRIPTOGRAFI FILE")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    val effectiveKey = if (useDeviceKey) {
+                        KeystoreManager.resolveEffectiveKey(context, keyText)
+                    } else {
+                        keyText
+                    }
+                    executeFileEncrypt(effectiveKey)
+                },
+                enabled = !isProcessing,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Enkripsi File", fontSize = 12.sp)
+            }
+
+            Button(
+                onClick = {
+                    val effectiveKey = if (useDeviceKey) {
+                        KeystoreManager.resolveEffectiveKey(context, keyText)
+                    } else {
+                        keyText
+                    }
+                    executeFileDecrypt(effectiveKey)
+                },
+                enabled = !isProcessing,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = MaterialTheme.colorScheme.onSecondary
+                )
+            ) {
+                Icon(imageVector = Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Dekripsi File", fontSize = 12.sp)
+            }
+        }
+
+        // Dedicated Biometric Action Buttons (User requested: "tombol enkripsi dekripsi pakai kunci biometrik")
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -428,58 +702,22 @@ fun FileCryptoScreen(
                         isError = true
                         return@Button
                     }
-                    val effectiveKey = if (useDeviceKey) {
-                        KeystoreManager.resolveEffectiveKey(context, keyText)
-                    } else {
-                        keyText
-                    }
-
-                    isProcessing = true
-                    progress = 0.05f
-                    progressStatusText = "Mempersiapkan enkripsi..."
-
-                    coroutineScope.launch(Dispatchers.IO) {
-                        try {
-                            val dotIndex = loadedFileName.lastIndexOf('.')
-                            val ext = if (dotIndex != -1) loadedFileName.substring(dotIndex) else ""
-                            val tempOut = File(context.cacheDir, "krip_encrypted_${System.currentTimeMillis()}.krip")
-
-                            val result = FileCrypto.processUriEncrypt(
-                                context = context,
-                                inputUri = uri,
-                                outputFile = tempOut,
-                                algoId = selectedAlgo.id,
-                                keyStr = effectiveKey,
-                                customIv = null,
-                                originalExt = ext
-                            ) { prog, status ->
-                                progress = prog
-                                progressStatusText = status
-                            }
-
-                            withContext(Dispatchers.Main) {
-                                isProcessing = false
-                                processedOutputFile = tempOut
-                                processedResult = result
-                                suggestedExportFileName = "$loadedFileName.krip"
-                                statusMessage = "Enkripsi Selesai! Ukuran hasil: ${formatSize(tempOut.length())} (${result.durationMs} ms)"
-                                isError = false
-                            }
-                        } catch (e: Throwable) {
-                            withContext(Dispatchers.Main) {
-                                isProcessing = false
-                                statusMessage = "Gagal Enkripsi File: ${e.message}"
-                                isError = true
-                            }
-                        }
+                    onTriggerBiometrics { hwKey ->
+                        useDeviceKey = true
+                        keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                        executeFileEncrypt(hwKey)
                     }
                 },
                 enabled = !isProcessing,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary
+                )
             ) {
-                Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Enkripsi File", fontSize = 12.sp)
+                Text("Enkripsi (Biometrik)", fontSize = 11.sp, maxLines = 1)
             }
 
             Button(
@@ -490,67 +728,22 @@ fun FileCryptoScreen(
                         isError = true
                         return@Button
                     }
-                    val effectiveKey = if (useDeviceKey) {
-                        KeystoreManager.resolveEffectiveKey(context, keyText)
-                    } else {
-                        keyText
-                    }
-
-                    isProcessing = true
-                    progress = 0.05f
-                    progressStatusText = "Mempersiapkan dekripsi..."
-
-                    coroutineScope.launch(Dispatchers.IO) {
-                        try {
-                            val tempOut = File(context.cacheDir, "krip_decrypted_${System.currentTimeMillis()}.bin")
-
-                            val result = FileCrypto.processUriDecrypt(
-                                context = context,
-                                inputUri = uri,
-                                outputFile = tempOut,
-                                keyStr = effectiveKey,
-                                fallbackAlgoId = selectedAlgo.id
-                            ) { prog, status ->
-                                progress = prog
-                                progressStatusText = status
-                            }
-
-                            val recoveredExt = result.originalExt
-                            val baseName = loadedFileName.removeSuffix(".krip")
-                            val exportName = if (recoveredExt.isNotEmpty()) {
-                                if (baseName.endsWith(recoveredExt)) baseName else "$baseName$recoveredExt"
-                            } else {
-                                if (loadedFileName.endsWith(".krip")) baseName else "$loadedFileName.dec"
-                            }
-
-                            withContext(Dispatchers.Main) {
-                                isProcessing = false
-                                processedOutputFile = tempOut
-                                processedResult = result
-                                suggestedExportFileName = exportName
-                                val extNotice = if (recoveredExt.isNotEmpty()) " (Ekstensi: $recoveredExt)" else ""
-                                statusMessage = "Dekripsi Selesai!$extNotice Ukuran: ${formatSize(tempOut.length())} (${result.durationMs} ms)"
-                                isError = false
-                            }
-                        } catch (e: Throwable) {
-                            withContext(Dispatchers.Main) {
-                                isProcessing = false
-                                statusMessage = "Gagal Dekripsi File: ${e.message}"
-                                isError = true
-                            }
-                        }
+                    onTriggerBiometrics { hwKey ->
+                        useDeviceKey = true
+                        keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                        executeFileDecrypt(hwKey)
                     }
                 },
                 enabled = !isProcessing,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    contentColor = MaterialTheme.colorScheme.onSecondary
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                 )
             ) {
-                Icon(imageVector = Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Dekripsi File", fontSize = 12.sp)
+                Text("Dekripsi (Biometrik)", fontSize = 11.sp, maxLines = 1)
             }
         }
 
@@ -594,7 +787,7 @@ fun FileCryptoScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Button(
                                 onClick = {
@@ -607,9 +800,38 @@ fun FileCryptoScreen(
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Simpan File", fontSize = 12.sp)
+                                Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Simpan (SAF)", fontSize = 10.sp, maxLines = 1)
+                            }
+
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        try {
+                                            val msg = saveToPublicDownloads(context, out, suggestedExportFileName)
+                                            withContext(Dispatchers.Main) {
+                                                statusMessage = msg
+                                                isError = false
+                                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                            }
+                                        } catch (e: Throwable) {
+                                            withContext(Dispatchers.Main) {
+                                                statusMessage = "Gagal menyimpan ke folder Downloads: ${e.message}"
+                                                isError = true
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary,
+                                    contentColor = MaterialTheme.colorScheme.onSecondary
+                                )
+                            ) {
+                                Icon(imageVector = Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Ke Downloads", fontSize = 10.sp, maxLines = 1)
                             }
 
                             OutlinedButton(
@@ -638,11 +860,11 @@ fun FileCryptoScreen(
                                         }
                                     }
                                 },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(0.9f)
                             ) {
-                                Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Salin Base64", fontSize = 11.sp)
+                                Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("Base64", fontSize = 10.sp, maxLines = 1)
                             }
                         }
                     }
@@ -651,6 +873,33 @@ fun FileCryptoScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+fun saveToPublicDownloads(context: Context, sourceFile: File, suggestedName: String): String {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, suggestedName)
+            put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IllegalStateException("Gagal membuat entri penyimpanan MediaStore")
+        resolver.openOutputStream(uri)?.use { out ->
+            FileInputStream(sourceFile).use { it.copyTo(out) }
+        }
+        values.clear()
+        values.put(MediaStore.Downloads.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+        "Berhasil disimpan di folder Unduhan (Downloads/$suggestedName)"
+    } else {
+        @Suppress("DEPRECATION")
+        val targetDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!targetDir.exists()) targetDir.mkdirs()
+        val destFile = File(targetDir, suggestedName)
+        sourceFile.copyTo(destFile, overwrite = true)
+        "Berhasil disimpan di: ${destFile.absolutePath}"
     }
 }
 
