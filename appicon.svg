@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A0E14" />
+      <stop offset="50%" stop-color="#101721" />
+      <stop offset="100%" stop-color="#070A0F" />
+    </linearGradient>
+
+    <!-- Outer Glow / Ring Gradient -->
+    <linearGradient id="cyberRing" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" stop-opacity="0.8" />
+      <stop offset="50%" stop-color="#7000FF" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#00FFA3" stop-opacity="0.8" />
+    </linearGradient>
+
+    <!-- Shield Primary Gradient (Electric Cyan to Neon Emerald) -->
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00E5FF" />
+      <stop offset="50%" stop-color="#00B0FF" />
+      <stop offset="100%" stop-color="#00E676" />
+    </linearGradient>
+
+    <!-- Inner Core Gradient -->
+    <linearGradient id="coreGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#B2EBF2" stop-opacity="0.6" />
+    </linearGradient>
+
+    <!-- Key Shackle Gradient -->
+    <linearGradient id="keyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#80D8FF" />
+      <stop offset="100%" stop-color="#A7FFEB" />
+    </linearGradient>
+
+    <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#00E5FF" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Base Squircle Background -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bgGrad)" stroke="url(#cyberRing)" stroke-width="3" />
+
+  <!-- Subtle Ambient Circuit Hexagons / Nodes in background -->
+  <g opacity="0.12" stroke="#00E5FF" stroke-width="1.5" fill="none">
+    <circle cx="256" cy="256" r="180" stroke-dasharray="8 12" />
+    <circle cx="256" cy="256" r="215" stroke-dasharray="4 16" />
+  </g>
+
+  <!-- Main Cyber Shield Outline with Neon Glow -->
+  <path d="M 256,92 
+           C 340,92 376,122 376,195 
+           C 376,290 310,366 256,412 
+           C 202,366 136,290 136,195 
+           C 136,122 172,92 256,92 Z"
+        fill="#121C26"
+        stroke="url(#shieldGrad)"
+        stroke-width="10"
+        stroke-linejoin="round"
+        filter="url(#subtleShadow)" />
+
+  <!-- Inner Geometric Modern Shield Accent -->
+  <path d="M 256,120 
+           C 318,120 348,142 348,200 
+           C 348,272 296,336 256,375 
+           C 216,336 164,272 164,200 
+           C 164,142 194,120 256,120 Z"
+        fill="#0D141C"
+        stroke="#00E5FF"
+        stroke-width="3"
+        opacity="0.7" />
+
+  <!-- Modern Futuristic "K" Lock Monogram -->
+  <!-- Padlock Arch / Key Shackle -->
+  <path d="M 220,205 
+           V 175 
+           C 220,152 236,136 256,136 
+           C 276,136 292,152 292,175 
+           V 205"
+        fill="none"
+        stroke="url(#keyGrad)"
+        stroke-width="12"
+        stroke-linecap="round" />
+
+  <!-- Padlock Body combined with Stylized "K" -->
+  <!-- Left Vertical Stem of K -->
+  <rect x="216" y="215" width="18" height="95" rx="9" fill="url(#shieldGrad)" />
+
+  <!-- Upper Diagonal Arm of K (Cipher Angle) -->
+  <path d="M 234,260 
+           L 286,218 
+           C 292,213 298,217 296,224 
+           L 294,228 
+           L 250,266 Z" 
+        fill="url(#shieldGrad)" />
+
+  <!-- Lower Diagonal Arm of K (Key Bit Accent) -->
+  <path d="M 244,258 
+           L 292,304 
+           C 297,309 293,315 286,315 
+           L 278,315 
+           L 230,270 Z" 
+        fill="url(#shieldGrad)" />
+
+  <!-- Center Biometric / Crypto Crystal Dot -->
+  <circle cx="256" cy="245" r="7" fill="#FFFFFF" filter="url(#neonGlow)" />
+  <circle cx="256" cy="245" r="3.5" fill="#00E5FF" />
+
+  <!-- Sleek Bottom Data Pulse Nodes -->
+  <line x1="210" y1="345" x2="302" y2="345" stroke="#00E5FF" stroke-width="2.5" stroke-linecap="round" opacity="0.6" />
+  <circle cx="256" cy="345" r="3.5" fill="#00FFA3" />
+</svg>
