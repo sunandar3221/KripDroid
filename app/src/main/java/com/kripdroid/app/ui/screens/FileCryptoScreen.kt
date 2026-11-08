@@ -13,11 +13,15 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,20 +30,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -58,6 +62,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -77,11 +82,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bouncycastle.util.encoders.Base64
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileOutputStream
+import java.io.FileInputStream
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FileCryptoScreen(
     onRequestMasterPasswordDialog: (onSuccess: (String) -> Unit) -> Unit,
@@ -96,9 +100,8 @@ fun FileCryptoScreen(
     var loadedUri by remember { mutableStateOf<Uri?>(null) }
     var loadedFileName by remember { mutableStateOf("") }
     var loadedFileSize by remember { mutableStateOf(0L) }
-    var loadedBytes by remember { mutableStateOf<ByteArray?>(null) }
 
-    var processedBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var processedOutputFile by remember { mutableStateOf<File?>(null) }
     var processedResult by remember { mutableStateOf<FileProcessResult?>(null) }
     var suggestedExportFileName by remember { mutableStateOf("") }
 
@@ -108,45 +111,60 @@ fun FileCryptoScreen(
 
     var isProcessing by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
+    var progressStatusText by remember { mutableStateOf("") }
     var statusMessage by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
 
+    // Resilient file picker using GetContent (compatible with 100% of Android devices)
     val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let {
-            loadedUri = it
-            coroutineScope.launch(Dispatchers.IO) {
+        if (uri == null) return@rememberLauncherForActivityResult
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                var name = "file_${System.currentTimeMillis()}"
+                var size = 0L
+
+                // 1. Safely query name and size without crashing on custom ROMs
                 try {
-                    var name = "file"
-                    var size = 0L
-                    context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
+                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                         if (cursor.moveToFirst()) {
                             val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            if (nameIdx != -1) {
+                                val fetched = cursor.getString(nameIdx)
+                                if (!fetched.isNullOrBlank()) name = fetched
+                            }
                             val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
-                            if (nameIdx != -1) name = cursor.getString(nameIdx)
-                            if (sizeIdx != -1) size = cursor.getLong(sizeIdx)
+                            if (sizeIdx != -1) {
+                                size = cursor.getLong(sizeIdx)
+                            }
                         }
                     }
-                    val stream = context.contentResolver.openInputStream(it)
-                    val bytes = stream?.readBytes() ?: ByteArray(0)
-                    stream?.close()
-                    if (size == 0L) size = bytes.size.toLong()
+                } catch (_: Throwable) {}
 
-                    withContext(Dispatchers.Main) {
-                        loadedFileName = name
-                        loadedFileSize = size
-                        loadedBytes = bytes
-                        processedBytes = null
-                        processedResult = null
-                        statusMessage = "File berhasil dimuat: $name (${formatSize(size)})"
-                        isError = false
-                    }
-                } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        statusMessage = "Gagal membaca file: ${e.message}"
-                        isError = true
-                    }
+                // Fallback size detection
+                if (size <= 0L) {
+                    try {
+                        context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                            size = pfd.statSize
+                        }
+                    } catch (_: Throwable) {}
+                }
+
+                withContext(Dispatchers.Main) {
+                    loadedUri = uri
+                    loadedFileName = name
+                    loadedFileSize = size
+                    processedOutputFile = null
+                    processedResult = null
+                    val sizeText = if (size > 0L) " (${formatSize(size)})" else ""
+                    statusMessage = "File berhasil dipilih: $name$sizeText"
+                    isError = false
+                }
+            } catch (e: Throwable) {
+                withContext(Dispatchers.Main) {
+                    statusMessage = "Gagal memuat file: ${e.message}"
+                    isError = true
                 }
             }
         }
@@ -156,21 +174,24 @@ fun FileCryptoScreen(
         contract = ActivityResultContracts.CreateDocument("*/*")
     ) { saveUri: Uri? ->
         saveUri?.let { uri ->
-            processedBytes?.let { bytes ->
+            val srcFile = processedOutputFile
+            if (srcFile != null && srcFile.exists()) {
                 coroutineScope.launch(Dispatchers.IO) {
                     try {
                         context.contentResolver.openOutputStream(uri)?.use { out ->
-                            out.write(bytes)
+                            FileInputStream(srcFile).use { input ->
+                                input.copyTo(out)
+                            }
                             out.flush()
                         }
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(context, "File berhasil disimpan!", Toast.LENGTH_SHORT).show()
-                            statusMessage = "File hasil telah disimpan dengan sukses."
+                            Toast.makeText(context, "File berhasil disimpan ke memori perangkat!", Toast.LENGTH_SHORT).show()
+                            statusMessage = "File hasil telah sukses diekspor."
                             isError = false
                         }
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         withContext(Dispatchers.Main) {
-                            statusMessage = "Gagal menyimpan file: ${e.message}"
+                            statusMessage = "Gagal mengekspor file: ${e.message}"
                             isError = true
                         }
                     }
@@ -185,6 +206,8 @@ fun FileCryptoScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
+            .imePadding()
+            .navigationBarsPadding()
             .padding(horizontal = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -198,30 +221,35 @@ fun FileCryptoScreen(
             colors = CardDefaults.cardColors(containerColor = SurfaceContainerHigh)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (loadedFileName.isNotEmpty()) loadedFileName else "Belum ada file yang dipilih",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        if (loadedFileSize > 0L) {
-                            Text(
-                                text = "Ukuran: ${formatSize(loadedFileSize)} (${loadedFileSize} bytes)",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                Text(
+                    text = if (loadedFileName.isNotEmpty()) loadedFileName else "Belum ada file yang dipilih",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (loadedFileSize > 0L) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Ukuran: ${formatSize(loadedFileSize)} (${loadedFileSize} bytes)",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 Spacer(modifier = Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Button(
-                        onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                        onClick = {
+                            try {
+                                filePickerLauncher.launch("*/*")
+                            } catch (_: Throwable) {
+                                statusMessage = "Tidak dapat membuka pemilih file di perangkat ini"
+                                isError = true
+                            }
+                        },
+                        enabled = !isProcessing,
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -231,18 +259,33 @@ fun FileCryptoScreen(
 
                     OutlinedButton(
                         onClick = {
-                            val sample = "KripDroid Sample Test Binary Stream Document: 1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            loadedBytes = sample.toByteArray(Charsets.UTF_8)
-                            loadedFileName = "contoh_dokumen.txt"
-                            loadedFileSize = loadedBytes!!.size.toLong()
-                            processedBytes = null
-                            processedResult = null
-                            if (keyText.isEmpty() && !useDeviceKey) {
-                                keyText = "SampleMasterKey!123"
+                            coroutineScope.launch(Dispatchers.IO) {
+                                try {
+                                    val sampleContent = "KripDroid Sample Document Test Payload: 1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZ\nKripDroid Material You Cryptography Suite Android Kotlin."
+                                    val sampleFile = File(context.cacheDir, "sample_kripdroid.txt")
+                                    sampleFile.writeText(sampleContent)
+                                    val sampleUri = Uri.fromFile(sampleFile)
+                                    withContext(Dispatchers.Main) {
+                                        loadedUri = sampleUri
+                                        loadedFileName = sampleFile.name
+                                        loadedFileSize = sampleFile.length()
+                                        processedOutputFile = null
+                                        processedResult = null
+                                        if (keyText.isEmpty() && !useDeviceKey) {
+                                            keyText = "SampleMasterKey!123"
+                                        }
+                                        statusMessage = "File sampel berhasil disiapkan!"
+                                        isError = false
+                                    }
+                                } catch (e: Throwable) {
+                                    withContext(Dispatchers.Main) {
+                                        statusMessage = "Gagal membuat sampel: ${e.message}"
+                                        isError = true
+                                    }
+                                }
                             }
-                            statusMessage = "File sampel berhasil dibuat!"
-                            isError = false
                         },
+                        enabled = !isProcessing,
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("Buat Sampel", fontSize = 12.sp)
@@ -328,31 +371,59 @@ fun FileCryptoScreen(
             )
         }
 
-        // Progress bar
+        // Dedicated Granular Progress Bar Card
         AnimatedVisibility(visible = isProcessing) {
-            Column {
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Sedang memproses kriptografi...",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerHigh)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = if (progressStatusText.isNotEmpty()) progressStatusText else "Sedang memproses kriptografi...",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "${(progress * 100).toInt()}%",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                    )
+                }
             }
         }
 
-        // Action Buttons Row
+        // Action Buttons Row (Responsive)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
                 onClick = {
-                    val bytes = loadedBytes
-                    if (bytes == null || bytes.isEmpty()) {
+                    val uri = loadedUri
+                    if (uri == null) {
                         statusMessage = "Pilih file terlebih dahulu!"
                         isError = true
                         return@Button
@@ -364,35 +435,37 @@ fun FileCryptoScreen(
                     }
 
                     isProcessing = true
-                    progress = 0.2f
+                    progress = 0.05f
+                    progressStatusText = "Mempersiapkan enkripsi..."
+
                     coroutineScope.launch(Dispatchers.IO) {
                         try {
                             val dotIndex = loadedFileName.lastIndexOf('.')
                             val ext = if (dotIndex != -1) loadedFileName.substring(dotIndex) else ""
-                            val inStream = ByteArrayInputStream(bytes)
-                            val outStream = ByteArrayOutputStream()
+                            val tempOut = File(context.cacheDir, "krip_encrypted_${System.currentTimeMillis()}.krip")
 
-                            val result = FileCrypto.processStreamEncrypt(
-                                input = inStream,
-                                output = outStream,
+                            val result = FileCrypto.processUriEncrypt(
+                                context = context,
+                                inputUri = uri,
+                                outputFile = tempOut,
                                 algoId = selectedAlgo.id,
                                 keyStr = effectiveKey,
                                 customIv = null,
                                 originalExt = ext
-                            ) { prog ->
+                            ) { prog, status ->
                                 progress = prog
+                                progressStatusText = status
                             }
 
-                            val outBytes = outStream.toByteArray()
                             withContext(Dispatchers.Main) {
                                 isProcessing = false
-                                processedBytes = outBytes
+                                processedOutputFile = tempOut
                                 processedResult = result
                                 suggestedExportFileName = "$loadedFileName.krip"
-                                statusMessage = "Enkripsi File Selesai! Ukuran hasil: ${formatSize(outBytes.size.toLong())}"
+                                statusMessage = "Enkripsi Selesai! Ukuran hasil: ${formatSize(tempOut.length())} (${result.durationMs} ms)"
                                 isError = false
                             }
-                        } catch (e: Exception) {
+                        } catch (e: Throwable) {
                             withContext(Dispatchers.Main) {
                                 isProcessing = false
                                 statusMessage = "Gagal Enkripsi File: ${e.message}"
@@ -405,14 +478,14 @@ fun FileCryptoScreen(
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Enkripsi File", fontSize = 13.sp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Enkripsi File", fontSize = 12.sp)
             }
 
             Button(
                 onClick = {
-                    val bytes = loadedBytes
-                    if (bytes == null || bytes.isEmpty()) {
+                    val uri = loadedUri
+                    if (uri == null) {
                         statusMessage = "Pilih file terenkripsi terlebih dahulu!"
                         isError = true
                         return@Button
@@ -424,22 +497,24 @@ fun FileCryptoScreen(
                     }
 
                     isProcessing = true
-                    progress = 0.2f
+                    progress = 0.05f
+                    progressStatusText = "Mempersiapkan dekripsi..."
+
                     coroutineScope.launch(Dispatchers.IO) {
                         try {
-                            val inStream = ByteArrayInputStream(bytes)
-                            val outStream = ByteArrayOutputStream()
+                            val tempOut = File(context.cacheDir, "krip_decrypted_${System.currentTimeMillis()}.bin")
 
-                            val result = FileCrypto.processStreamDecrypt(
-                                input = inStream,
-                                output = outStream,
+                            val result = FileCrypto.processUriDecrypt(
+                                context = context,
+                                inputUri = uri,
+                                outputFile = tempOut,
                                 keyStr = effectiveKey,
                                 fallbackAlgoId = selectedAlgo.id
-                            ) { prog ->
+                            ) { prog, status ->
                                 progress = prog
+                                progressStatusText = status
                             }
 
-                            val outBytes = outStream.toByteArray()
                             val recoveredExt = result.originalExt
                             val baseName = loadedFileName.removeSuffix(".krip")
                             val exportName = if (recoveredExt.isNotEmpty()) {
@@ -450,14 +525,14 @@ fun FileCryptoScreen(
 
                             withContext(Dispatchers.Main) {
                                 isProcessing = false
-                                processedBytes = outBytes
+                                processedOutputFile = tempOut
                                 processedResult = result
                                 suggestedExportFileName = exportName
-                                val extNotice = if (recoveredExt.isNotEmpty()) " (Ekstensi Asli: $recoveredExt)" else ""
-                                statusMessage = "Dekripsi File Selesai!$extNotice Ukuran: ${formatSize(outBytes.size.toLong())}"
+                                val extNotice = if (recoveredExt.isNotEmpty()) " (Ekstensi: $recoveredExt)" else ""
+                                statusMessage = "Dekripsi Selesai!$extNotice Ukuran: ${formatSize(tempOut.length())} (${result.durationMs} ms)"
                                 isError = false
                             }
-                        } catch (e: Exception) {
+                        } catch (e: Throwable) {
                             withContext(Dispatchers.Main) {
                                 isProcessing = false
                                 statusMessage = "Gagal Dekripsi File: ${e.message}"
@@ -474,8 +549,8 @@ fun FileCryptoScreen(
                 )
             ) {
                 Icon(imageVector = Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Dekripsi File", fontSize = 13.sp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Dekripsi File", fontSize = 12.sp)
             }
         }
 
@@ -483,65 +558,92 @@ fun FileCryptoScreen(
         StatusBanner(message = statusMessage, isError = isError)
 
         // Result Card & Save Actions
-        processedBytes?.let { outBytes ->
-            SectionTitle(title = "HASIL PROSES FILE")
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = SurfaceContainerHigh)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "File Hasil: $suggestedExportFileName",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Ukuran Hasil: ${formatSize(outBytes.size.toLong())} | Durasi: ${processedResult?.durationMs ?: 0} ms",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    processedResult?.let { res ->
-                        if (res.originalExt.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Ekstensi Asli Terpulihkan: ${res.originalExt}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { saveFileLauncher.launch(suggestedExportFileName) },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Simpan File", fontSize = 12.sp)
+        processedOutputFile?.let { out ->
+            if (out.exists()) {
+                SectionTitle(title = "HASIL PROSES FILE")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceContainerHigh)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "File Hasil: $suggestedExportFileName",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Ukuran: ${formatSize(out.length())} | Durasi: ${processedResult?.durationMs ?: 0} ms",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        processedResult?.let { res ->
+                            if (res.originalExt.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Ekstensi Asli Terpulihkan: ${res.originalExt}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
                         }
 
-                        OutlinedButton(
-                            onClick = {
-                                val b64 = Base64.toBase64String(outBytes)
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("KripDroid Base64", b64)
-                                clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "Hasil disalin sebagai Base64!", Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.weight(1f)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Salin Base64", fontSize = 11.sp)
+                            Button(
+                                onClick = {
+                                    try {
+                                        saveFileLauncher.launch(suggestedExportFileName)
+                                    } catch (_: Throwable) {
+                                        statusMessage = "Tidak dapat membuka dialog penyimpanan di perangkat ini"
+                                        isError = true
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Simpan File", fontSize = 12.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        try {
+                                            if (out.length() > 5 * 1024 * 1024) {
+                                                withContext(Dispatchers.Main) {
+                                                    Toast.makeText(context, "File terlalu besar untuk disalin sebagai Base64 (>5MB)", Toast.LENGTH_SHORT).show()
+                                                }
+                                                return@launch
+                                            }
+                                            val fileBytes = out.readBytes()
+                                            val b64 = Base64.toBase64String(fileBytes)
+                                            withContext(Dispatchers.Main) {
+                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                val clip = ClipData.newPlainText("KripDroid Base64", b64)
+                                                clipboard.setPrimaryClip(clip)
+                                                Toast.makeText(context, "Hasil disalin sebagai Base64!", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } catch (e: Throwable) {
+                                            withContext(Dispatchers.Main) {
+                                                statusMessage = "Gagal menyalin Base64: ${e.message}"
+                                                isError = true
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Salin Base64", fontSize = 11.sp)
+                            }
                         }
                     }
                 }
@@ -553,6 +655,7 @@ fun FileCryptoScreen(
 }
 
 fun formatSize(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
     if (bytes < 1024) return "$bytes B"
     val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
     val pre = "KMGTPE"[exp - 1]

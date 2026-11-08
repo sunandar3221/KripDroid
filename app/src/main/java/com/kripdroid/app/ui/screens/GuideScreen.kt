@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,6 +38,8 @@ fun GuideScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
+            .imePadding()
+            .navigationBarsPadding()
             .padding(horizontal = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {

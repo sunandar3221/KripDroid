@@ -1,6 +1,10 @@
 package com.kripdroid.app.crypto
 
+import android.content.Context
+import android.net.Uri
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.ByteBuffer
@@ -280,6 +284,120 @@ object FileCrypto {
             originalExt = decrypted.originalExt,
             inputSize = rawData.size.toLong(),
             outputSize = decrypted.plainData.size.toLong(),
+            durationMs = duration
+        )
+    }
+
+    fun processUriEncrypt(
+        context: Context,
+        inputUri: Uri,
+        outputFile: File,
+        algoId: String,
+        keyStr: String,
+        customIv: ByteArray?,
+        originalExt: String,
+        onProgress: (progress: Float, status: String) -> Unit
+    ): FileProcessResult {
+        val startTime = System.currentTimeMillis()
+        onProgress(0.1f, "Membaca data file sumber...")
+
+        val inStream = context.contentResolver.openInputStream(inputUri)
+            ?: throw IllegalArgumentException("Tidak dapat membuka file sumber")
+
+        val plainData = inStream.use { it.readBytes() }
+        onProgress(0.45f, "Menjalankan derivasi kunci & enkripsi $algoId...")
+
+        val salt = ByteArray(16).also { secureRandom.nextBytes(it) }
+        val (cipherData, usedIv) = CryptoEngine.encryptBytesWithSalt(
+            algoId = algoId,
+            plain = plainData,
+            keyStr = keyStr,
+            customIv = customIv,
+            salt = salt
+        )
+
+        onProgress(0.8f, "Menyusun struktur paket file terenkripsi...")
+        val outStream = FileOutputStream(outputFile)
+        outStream.use { out ->
+            out.write(FileMagicV3)
+
+            val algoBytes = algoId.toByteArray(Charsets.UTF_8)
+            out.write(algoBytes.size)
+            out.write(algoBytes)
+
+            var cleanExt = originalExt.trim()
+            if (cleanExt.isNotEmpty() && !cleanExt.startsWith(".")) {
+                cleanExt = ".$cleanExt"
+            }
+            val extBytes = cleanExt.toByteArray(Charsets.UTF_8)
+            out.write(extBytes.size)
+            if (extBytes.isNotEmpty()) {
+                out.write(extBytes)
+            }
+
+            out.write(salt.size)
+            if (salt.isNotEmpty()) {
+                out.write(salt)
+            }
+
+            out.write(usedIv.size)
+            if (usedIv.isNotEmpty()) {
+                out.write(usedIv)
+            }
+
+            val sizeBuf = ByteBuffer.allocate(8).putLong(plainData.size.toLong()).array()
+            out.write(sizeBuf)
+            out.write(cipherData)
+            out.flush()
+        }
+
+        onProgress(1.0f, "Enkripsi file selesai!")
+        val duration = System.currentTimeMillis() - startTime
+        return FileProcessResult(
+            algoId = algoId,
+            originalExt = originalExt,
+            inputSize = plainData.size.toLong(),
+            outputSize = outputFile.length(),
+            durationMs = duration
+        )
+    }
+
+    fun processUriDecrypt(
+        context: Context,
+        inputUri: Uri,
+        outputFile: File,
+        keyStr: String,
+        fallbackAlgoId: String,
+        onProgress: (progress: Float, status: String) -> Unit
+    ): FileProcessResult {
+        val startTime = System.currentTimeMillis()
+        onProgress(0.15f, "Membaca header file terenkripsi...")
+
+        val inStream = context.contentResolver.openInputStream(inputUri)
+            ?: throw IllegalArgumentException("Tidak dapat membuka file sumber")
+
+        val rawData = inStream.use { it.readBytes() }
+        onProgress(0.5f, "Mendekripsi data biner...")
+
+        val decrypted = decryptFileData(
+            rawData = rawData,
+            keyStr = keyStr,
+            fallbackAlgoId = fallbackAlgoId
+        )
+
+        onProgress(0.85f, "Menyimpan file hasil dekripsi...")
+        FileOutputStream(outputFile).use { out ->
+            out.write(decrypted.plainData)
+            out.flush()
+        }
+
+        onProgress(1.0f, "Dekripsi file selesai!")
+        val duration = System.currentTimeMillis() - startTime
+        return FileProcessResult(
+            algoId = decrypted.algoId,
+            originalExt = decrypted.originalExt,
+            inputSize = rawData.size.toLong(),
+            outputSize = outputFile.length(),
             durationMs = duration
         )
     }

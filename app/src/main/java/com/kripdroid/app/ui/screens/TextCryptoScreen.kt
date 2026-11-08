@@ -5,19 +5,18 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,10 +38,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -51,6 +52,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,8 +70,10 @@ import com.kripdroid.app.security.KeystoreManager
 import com.kripdroid.app.ui.components.AlgorithmInfoCard
 import com.kripdroid.app.ui.components.SectionTitle
 import com.kripdroid.app.ui.components.StatusBanner
-import com.kripdroid.app.ui.theme.PrimaryContainer
 import com.kripdroid.app.ui.theme.SurfaceContainerHigh
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -78,6 +82,8 @@ fun TextCryptoScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     var selectedAlgoId by remember { mutableStateOf("aes256gcm") }
     val selectedAlgo = remember(selectedAlgoId) { CryptoAlgorithms.getAlgorithm(selectedAlgoId) }
 
@@ -90,6 +96,7 @@ fun TextCryptoScreen(
     var showAdvancedIv by remember { mutableStateOf(false) }
     var useDeviceKey by remember { mutableStateOf(false) }
 
+    var isProcessing by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
 
@@ -99,6 +106,8 @@ fun TextCryptoScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
+            .imePadding()
+            .navigationBarsPadding()
             .padding(horizontal = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -142,7 +151,7 @@ fun TextCryptoScreen(
             label = { Text("Ketik atau tempel teks di sini...") },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(110.dp),
+                .height(115.dp),
             supportingText = {
                 Text(
                     text = "${inputText.length} karakter | ${inputText.toByteArray(Charsets.UTF_8).size} byte",
@@ -249,7 +258,35 @@ fun TextCryptoScreen(
             }
         }
 
-        // Action Buttons Row
+        // Progress indicator for Text Crypto
+        AnimatedVisibility(visible = isProcessing) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerHigh)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Sedang memproses kriptografi (Argon2id derivation)...",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+
+        // Action Buttons Row (Responsive)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -261,34 +298,44 @@ fun TextCryptoScreen(
                         isError = true
                         return@Button
                     }
-                    try {
-                        val effectiveKey = if (useDeviceKey) {
-                            KeystoreManager.resolveEffectiveKey(context, keyText)
-                        } else {
-                            keyText
+                    isProcessing = true
+                    coroutineScope.launch(Dispatchers.IO) {
+                        try {
+                            val effectiveKey = if (useDeviceKey) {
+                                KeystoreManager.resolveEffectiveKey(context, keyText)
+                            } else {
+                                keyText
+                            }
+                            val (enc, usedIv) = CryptoEngine.encryptText(
+                                algoId = selectedAlgo.id,
+                                plainText = inputText,
+                                keyStr = effectiveKey,
+                                ivStr = ivText
+                            )
+                            withContext(Dispatchers.Main) {
+                                outputText = enc
+                                if (usedIv.isNotEmpty()) {
+                                    ivText = usedIv
+                                }
+                                statusMessage = "Enkripsi berhasil diselesaikan (${selectedAlgo.name})"
+                                isError = false
+                                isProcessing = false
+                            }
+                        } catch (e: Throwable) {
+                            withContext(Dispatchers.Main) {
+                                statusMessage = "Gagal Enkripsi: ${e.message}"
+                                isError = true
+                                isProcessing = false
+                            }
                         }
-                        val (enc, usedIv) = CryptoEngine.encryptText(
-                            algoId = selectedAlgo.id,
-                            plainText = inputText,
-                            keyStr = effectiveKey,
-                            ivStr = ivText
-                        )
-                        outputText = enc
-                        if (usedIv.isNotEmpty()) {
-                            ivText = usedIv
-                        }
-                        statusMessage = "Enkripsi berhasil diselesaikan (${selectedAlgo.name})"
-                        isError = false
-                    } catch (e: Exception) {
-                        statusMessage = "Gagal Enkripsi: ${e.message}"
-                        isError = true
                     }
                 },
+                enabled = !isProcessing,
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Enkripsi Teks", fontSize = 13.sp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Enkripsi Teks", fontSize = 12.sp)
             }
 
             Button(
@@ -298,26 +345,36 @@ fun TextCryptoScreen(
                         isError = true
                         return@Button
                     }
-                    try {
-                        val effectiveKey = if (useDeviceKey) {
-                            KeystoreManager.resolveEffectiveKey(context, keyText)
-                        } else {
-                            keyText
+                    isProcessing = true
+                    coroutineScope.launch(Dispatchers.IO) {
+                        try {
+                            val effectiveKey = if (useDeviceKey) {
+                                KeystoreManager.resolveEffectiveKey(context, keyText)
+                            } else {
+                                keyText
+                            }
+                            val dec = CryptoEngine.decryptText(
+                                algoId = selectedAlgo.id,
+                                cipherText = inputText,
+                                keyStr = effectiveKey,
+                                ivStr = ivText
+                            )
+                            withContext(Dispatchers.Main) {
+                                outputText = dec
+                                statusMessage = "Dekripsi berhasil diselesaikan (${selectedAlgo.name})"
+                                isError = false
+                                isProcessing = false
+                            }
+                        } catch (e: Throwable) {
+                            withContext(Dispatchers.Main) {
+                                statusMessage = "Gagal Dekripsi: ${e.message}"
+                                isError = true
+                                isProcessing = false
+                            }
                         }
-                        val dec = CryptoEngine.decryptText(
-                            algoId = selectedAlgo.id,
-                            cipherText = inputText,
-                            keyStr = effectiveKey,
-                            ivStr = ivText
-                        )
-                        outputText = dec
-                        statusMessage = "Dekripsi berhasil diselesaikan (${selectedAlgo.name})"
-                        isError = false
-                    } catch (e: Exception) {
-                        statusMessage = "Gagal Dekripsi: ${e.message}"
-                        isError = true
                     }
                 },
+                enabled = !isProcessing,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.secondary,
@@ -325,12 +382,12 @@ fun TextCryptoScreen(
                 )
             ) {
                 Icon(imageVector = Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Dekripsi Teks", fontSize = 13.sp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Dekripsi Teks", fontSize = 12.sp)
             }
         }
 
-        // Secondary Action Buttons Row
+        // Secondary Action Buttons Row (Responsive)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -345,9 +402,9 @@ fun TextCryptoScreen(
                 },
                 modifier = Modifier.weight(1f)
             ) {
-                Icon(imageVector = Icons.Default.SwapVert, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(imageVector = Icons.Default.SwapVert, contentDescription = null, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Tukar", fontSize = 12.sp)
+                Text("Tukar", fontSize = 11.sp)
             }
 
             OutlinedButton(
@@ -361,7 +418,7 @@ fun TextCryptoScreen(
                 },
                 modifier = Modifier.weight(1f)
             ) {
-                Text("Contoh Teks", fontSize = 12.sp)
+                Text("Contoh Teks", fontSize = 11.sp)
             }
 
             OutlinedButton(
@@ -373,7 +430,7 @@ fun TextCryptoScreen(
                 },
                 modifier = Modifier.weight(1f)
             ) {
-                Text("Bersihkan", fontSize = 12.sp)
+                Text("Bersihkan", fontSize = 11.sp)
             }
         }
 

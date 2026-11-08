@@ -71,7 +71,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen() {
     val context = LocalContext.current
-    val activity = context as? FragmentActivity
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
 
@@ -81,22 +80,27 @@ fun HomeScreen() {
     var pendingMasterKeyCallback by remember { mutableStateOf<((String) -> Unit)?>(null) }
 
     fun triggerBiometrics(onSuccess: (String) -> Unit) {
-        if (activity != null && BiometricHelper.isBiometricAvailable(context)) {
-            BiometricHelper.authenticate(
-                activity = activity,
-                title = "Otentikasi Kunci Perangkat",
-                subtitle = "Pindai sidik jari atau wajah Anda",
-                onSuccess = {
-                    val hwKey = KeystoreManager.getDeviceHardwareKey(context)
-                    onSuccess(hwKey)
-                    Toast.makeText(context, "Otentikasi biometrik berhasil!", Toast.LENGTH_SHORT).show()
-                },
-                onError = { err ->
-                    Toast.makeText(context, "Gagal biometrik: $err", Toast.LENGTH_SHORT).show()
-                }
-            )
+        val activity = with(BiometricHelper) { context.findFragmentActivity() }
+        if (activity != null) {
+            if (BiometricHelper.isBiometricAvailable(context)) {
+                BiometricHelper.authenticate(
+                    activity = activity,
+                    title = "Otentikasi Kunci Perangkat",
+                    subtitle = "Pindai sidik jari, wajah, atau PIN/Pola Anda",
+                    onSuccess = {
+                        val hwKey = KeystoreManager.getDeviceHardwareKey(context)
+                        onSuccess(hwKey)
+                        Toast.makeText(context, "Otentikasi biometrik berhasil!", Toast.LENGTH_SHORT).show()
+                    },
+                    onError = { err ->
+                        Toast.makeText(context, "Gagal biometrik: $err", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            } else {
+                Toast.makeText(context, "Perangkat belum mengaktifkan kunci layar / biometrik", Toast.LENGTH_SHORT).show()
+            }
         } else {
-            Toast.makeText(context, "Sensor biometrik tidak tersedia pada perangkat ini", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Tidak dapat mengakses aktivitas sistem", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -294,25 +298,25 @@ fun HomeScreen() {
                         selected = currentTab == 0,
                         onClick = { currentTab = 0 },
                         icon = { Icon(Icons.Default.Info, contentDescription = "Panduan") },
-                        label = { Text("Panduan", fontSize = 11.sp) }
+                        label = { Text("Panduan", fontSize = 10.sp, maxLines = 1) }
                     )
                     NavigationBarItem(
                         selected = currentTab == 1,
                         onClick = { currentTab = 1 },
-                        icon = { Icon(Icons.Default.TextFields, contentDescription = "Mode Teks") },
-                        label = { Text("Mode Teks", fontSize = 11.sp) }
+                        icon = { Icon(Icons.Default.TextFields, contentDescription = "Teks") },
+                        label = { Text("Teks", fontSize = 10.sp, maxLines = 1) }
                     )
                     NavigationBarItem(
                         selected = currentTab == 2,
                         onClick = { currentTab = 2 },
-                        icon = { Icon(Icons.Default.Folder, contentDescription = "Mode File") },
-                        label = { Text("Mode File", fontSize = 11.sp) }
+                        icon = { Icon(Icons.Default.Folder, contentDescription = "File") },
+                        label = { Text("File", fontSize = 10.sp, maxLines = 1) }
                     )
                     NavigationBarItem(
                         selected = currentTab == 3,
                         onClick = { currentTab = 3 },
                         icon = { Icon(Icons.Default.Settings, contentDescription = "Pengaturan") },
-                        label = { Text("Pengaturan", fontSize = 11.sp) }
+                        label = { Text("Pengaturan", fontSize = 10.sp, maxLines = 1) }
                     )
                 }
             }
