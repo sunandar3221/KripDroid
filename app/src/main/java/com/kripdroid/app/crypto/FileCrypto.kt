@@ -301,8 +301,13 @@ object FileCrypto {
         val startTime = System.currentTimeMillis()
         onProgress(0.1f, "Membaca data file sumber...")
 
-        val inStream = context.contentResolver.openInputStream(inputUri)
-            ?: throw IllegalArgumentException("Tidak dapat membuka file sumber")
+        val inStream = if (inputUri.scheme == "file") {
+            val path = inputUri.path ?: inputUri.schemeSpecificPart
+            java.io.FileInputStream(File(path))
+        } else {
+            context.contentResolver.openInputStream(inputUri)
+                ?: throw IllegalArgumentException("Tidak dapat membuka file sumber")
+        }
 
         val plainData = inStream.use { it.readBytes() }
         onProgress(0.45f, "Menjalankan derivasi kunci & enkripsi $algoId...")
@@ -373,8 +378,13 @@ object FileCrypto {
         val startTime = System.currentTimeMillis()
         onProgress(0.15f, "Membaca header file terenkripsi...")
 
-        val inStream = context.contentResolver.openInputStream(inputUri)
-            ?: throw IllegalArgumentException("Tidak dapat membuka file sumber")
+        val inStream = if (inputUri.scheme == "file") {
+            val path = inputUri.path ?: inputUri.schemeSpecificPart
+            java.io.FileInputStream(File(path))
+        } else {
+            context.contentResolver.openInputStream(inputUri)
+                ?: throw IllegalArgumentException("Tidak dapat membuka file sumber")
+        }
 
         val rawData = inStream.use { it.readBytes() }
         onProgress(0.5f, "Mendekripsi data biner...")

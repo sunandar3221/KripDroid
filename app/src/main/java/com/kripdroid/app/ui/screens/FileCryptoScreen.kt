@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Save
@@ -80,6 +81,7 @@ import com.kripdroid.app.security.KeystoreManager
 import com.kripdroid.app.ui.components.AlgorithmInfoCard
 import com.kripdroid.app.ui.components.SectionTitle
 import com.kripdroid.app.ui.components.StatusBanner
+import com.kripdroid.app.ui.dialogs.InternalFilePickerDialog
 import com.kripdroid.app.ui.theme.SurfaceContainerHigh
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -112,6 +114,7 @@ fun FileCryptoScreen(
     var keyText by remember { mutableStateOf("") }
     var isKeyMasked by remember { mutableStateOf(false) }
     var useDeviceKey by remember { mutableStateOf(false) }
+    var showInternalPicker by remember { mutableStateOf(false) }
 
     var isProcessing by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
@@ -213,8 +216,9 @@ fun FileCryptoScreen(
             } catch (_: Throwable) {}
         }
         if (!launched) {
-            statusMessage = "Gagal membuka pemilih berkas: Aplikasi pengelola berkas tidak ditemukan di sistem ini."
-            isError = true
+            showInternalPicker = true
+            statusMessage = "Aplikasi pengelola berkas sistem tidak ditemukan. Membuka Pengelola Berkas Internal KripDroid..."
+            isError = false
         }
     }
 
@@ -404,46 +408,60 @@ fun FileCryptoScreen(
                     Button(
                         onClick = { openUniversalFilePicker() },
                         enabled = !isProcessing,
-                        modifier = Modifier.weight(1.2f)
-                    ) {
-                        Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Pilih File...", fontSize = 13.sp)
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            coroutineScope.launch(Dispatchers.IO) {
-                                try {
-                                    val sampleContent = "KripDroid Sample Document Test Payload: 1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZ\nKripDroid Material You Cryptography Suite Android Kotlin."
-                                    val sampleFile = File(context.cacheDir, "sample_kripdroid.txt")
-                                    sampleFile.writeText(sampleContent)
-                                    val sampleUri = Uri.fromFile(sampleFile)
-                                    withContext(Dispatchers.Main) {
-                                        loadedUri = sampleUri
-                                        loadedFileName = sampleFile.name
-                                        loadedFileSize = sampleFile.length()
-                                        processedOutputFile = null
-                                        processedResult = null
-                                        if (keyText.isEmpty() && !useDeviceKey) {
-                                            keyText = "SampleMasterKey!123"
-                                        }
-                                        statusMessage = "File sampel berhasil disiapkan!"
-                                        isError = false
-                                    }
-                                } catch (e: Throwable) {
-                                    withContext(Dispatchers.Main) {
-                                        statusMessage = "Gagal membuat sampel: ${e.message}"
-                                        isError = true
-                                    }
-                                }
-                            }
-                        },
-                        enabled = !isProcessing,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Buat Sampel", fontSize = 12.sp)
+                        Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Pilih Sistem", fontSize = 11.sp, maxLines = 1)
                     }
+
+                    Button(
+                        onClick = { showInternalPicker = true },
+                        enabled = !isProcessing,
+                        modifier = Modifier.weight(1.2f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary,
+                            contentColor = MaterialTheme.colorScheme.onSecondary
+                        )
+                    ) {
+                        Icon(imageVector = Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Buka File Internal", fontSize = 11.sp, maxLines = 1)
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedButton(
+                    onClick = {
+                        coroutineScope.launch(Dispatchers.IO) {
+                            try {
+                                val sampleContent = "KripDroid Sample Document Test Payload: 1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZ\nKripDroid Material You Cryptography Suite Android Kotlin."
+                                val sampleFile = File(context.cacheDir, "sample_kripdroid.txt")
+                                sampleFile.writeText(sampleContent)
+                                val sampleUri = Uri.fromFile(sampleFile)
+                                withContext(Dispatchers.Main) {
+                                    loadedUri = sampleUri
+                                    loadedFileName = sampleFile.name
+                                    loadedFileSize = sampleFile.length()
+                                    processedOutputFile = null
+                                    processedResult = null
+                                    if (keyText.isEmpty() && !useDeviceKey) {
+                                        keyText = "SampleMasterKey!123"
+                                    }
+                                    statusMessage = "File sampel berhasil disiapkan!"
+                                    isError = false
+                                }
+                            } catch (e: Throwable) {
+                                withContext(Dispatchers.Main) {
+                                    statusMessage = "Gagal membuat sampel: ${e.message}"
+                                    isError = true
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isProcessing,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Buat Sampel Dokumen", fontSize = 11.sp)
                 }
             }
         }
@@ -873,6 +891,22 @@ fun FileCryptoScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    if (showInternalPicker) {
+        InternalFilePickerDialog(
+            onDismiss = { showInternalPicker = false },
+            onFileSelected = { selectedFile ->
+                showInternalPicker = false
+                loadedUri = Uri.fromFile(selectedFile)
+                loadedFileName = selectedFile.name
+                loadedFileSize = selectedFile.length()
+                processedOutputFile = null
+                processedResult = null
+                statusMessage = "File berhasil dipilih: ${selectedFile.name} (${formatSize(selectedFile.length())})"
+                isError = false
+            }
+        )
     }
 }
 
