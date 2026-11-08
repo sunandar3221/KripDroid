@@ -299,26 +299,30 @@ fun HomeScreen() {
                     NavigationBarItem(
                         selected = currentTab == 0,
                         onClick = { currentTab = 0 },
+                        alwaysShowLabel = true,
                         icon = { Icon(Icons.Default.Info, contentDescription = "Panduan") },
-                        label = { Text("Panduan", fontSize = 10.sp, maxLines = 1) }
+                        label = { Text("Panduan", fontSize = 11.sp, fontWeight = if (currentTab == 0) FontWeight.Bold else FontWeight.Normal) }
                     )
                     NavigationBarItem(
                         selected = currentTab == 1,
                         onClick = { currentTab = 1 },
+                        alwaysShowLabel = true,
                         icon = { Icon(Icons.Default.TextFields, contentDescription = "Teks") },
-                        label = { Text("Teks", fontSize = 10.sp, maxLines = 1) }
+                        label = { Text("Teks", fontSize = 11.sp, fontWeight = if (currentTab == 1) FontWeight.Bold else FontWeight.Normal) }
                     )
                     NavigationBarItem(
                         selected = currentTab == 2,
                         onClick = { currentTab = 2 },
+                        alwaysShowLabel = true,
                         icon = { Icon(Icons.Default.Folder, contentDescription = "File") },
-                        label = { Text("File", fontSize = 10.sp, maxLines = 1) }
+                        label = { Text("File", fontSize = 11.sp, fontWeight = if (currentTab == 2) FontWeight.Bold else FontWeight.Normal) }
                     )
                     NavigationBarItem(
                         selected = currentTab == 3,
                         onClick = { currentTab = 3 },
+                        alwaysShowLabel = true,
                         icon = { Icon(Icons.Default.Settings, contentDescription = "Pengaturan") },
-                        label = { Text("Pengaturan", fontSize = 10.sp, maxLines = 1) }
+                        label = { Text("Pengaturan", fontSize = 11.sp, fontWeight = if (currentTab == 3) FontWeight.Bold else FontWeight.Normal) }
                     )
                 }
             }

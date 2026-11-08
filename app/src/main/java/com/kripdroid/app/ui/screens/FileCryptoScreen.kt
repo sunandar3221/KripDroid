@@ -18,6 +18,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -115,6 +117,7 @@ fun FileCryptoScreen(
     var isKeyMasked by remember { mutableStateOf(false) }
     var useDeviceKey by remember { mutableStateOf(false) }
     var showInternalPicker by remember { mutableStateOf(false) }
+    var showInternalSaveDialog by remember { mutableStateOf(false) }
 
     var isProcessing by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
@@ -408,16 +411,18 @@ fun FileCryptoScreen(
                     Button(
                         onClick = { openUniversalFilePicker() },
                         enabled = !isProcessing,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(imageVector = Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Pilih Sistem", fontSize = 11.sp, maxLines = 1)
+                        Text("Pilih Sistem", fontSize = 11.sp)
                     }
 
                     Button(
                         onClick = { showInternalPicker = true },
                         enabled = !isProcessing,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                         modifier = Modifier.weight(1.2f),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.secondary,
@@ -426,7 +431,7 @@ fun FileCryptoScreen(
                     ) {
                         Icon(imageVector = Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Buka File Internal", fontSize = 11.sp, maxLines = 1)
+                        Text("Buka File Internal", fontSize = 11.sp)
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
@@ -583,6 +588,7 @@ fun FileCryptoScreen(
                                 isError = false
                             }
                         },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(
@@ -591,7 +597,7 @@ fun FileCryptoScreen(
                             modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Master Password", fontSize = 11.sp, maxLines = 1)
+                        Text("Master Password", fontSize = 11.sp)
                     }
 
                     OutlinedButton(
@@ -603,6 +609,7 @@ fun FileCryptoScreen(
                                 isError = false
                             }
                         },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(
@@ -612,7 +619,7 @@ fun FileCryptoScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Kunci Biometrik", fontSize = 11.sp, maxLines = 1)
+                        Text("Kunci Biometrik", fontSize = 11.sp)
                     }
                 }
             }
@@ -727,6 +734,7 @@ fun FileCryptoScreen(
                     }
                 },
                 enabled = !isProcessing,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.tertiary,
@@ -735,7 +743,7 @@ fun FileCryptoScreen(
             ) {
                 Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Enkripsi (Biometrik)", fontSize = 11.sp, maxLines = 1)
+                Text("Enkripsi Biometrik", fontSize = 11.sp)
             }
 
             Button(
@@ -753,6 +761,7 @@ fun FileCryptoScreen(
                     }
                 },
                 enabled = !isProcessing,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
@@ -761,7 +770,7 @@ fun FileCryptoScreen(
             ) {
                 Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Dekripsi (Biometrik)", fontSize = 11.sp, maxLines = 1)
+                Text("Dekripsi Biometrik", fontSize = 11.sp)
             }
         }
 
@@ -803,87 +812,126 @@ fun FileCryptoScreen(
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Button(
-                                onClick = {
-                                    try {
-                                        saveFileLauncher.launch(suggestedExportFileName)
-                                    } catch (_: Throwable) {
-                                        statusMessage = "Tidak dapat membuka dialog penyimpanan di perangkat ini"
-                                        isError = true
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text("Simpan (SAF)", fontSize = 10.sp, maxLines = 1)
-                            }
 
-                            Button(
-                                onClick = {
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        try {
-                                            val msg = saveToPublicDownloads(context, out, suggestedExportFileName)
-                                            withContext(Dispatchers.Main) {
-                                                statusMessage = msg
-                                                isError = false
-                                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                                            }
-                                        } catch (e: Throwable) {
-                                            withContext(Dispatchers.Main) {
-                                                statusMessage = "Gagal menyimpan ke folder Downloads: ${e.message}"
-                                                isError = true
-                                            }
+                        // Primary Save Action: Direct to Downloads (Guaranteed to work without DocumentsUI dialogs!)
+                        Button(
+                            onClick = {
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    try {
+                                        val msg = saveToPublicDownloads(context, out, suggestedExportFileName)
+                                        withContext(Dispatchers.Main) {
+                                            statusMessage = msg
+                                            isError = false
+                                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                        }
+                                    } catch (e: Throwable) {
+                                        withContext(Dispatchers.Main) {
+                                            statusMessage = "Gagal menyimpan ke folder Downloads: ${e.message}"
+                                            isError = true
                                         }
                                     }
-                                },
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(vertical = 12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Icon(imageVector = Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Simpan File ke Folder Downloads", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Secondary Row: Internal Folder Saver & SAF Fallback
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { showInternalSaveDialog = true },
                                 modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.secondary,
                                     contentColor = MaterialTheme.colorScheme.onSecondary
                                 )
                             ) {
-                                Icon(imageVector = Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text("Ke Downloads", fontSize = 10.sp, maxLines = 1)
+                                Icon(imageVector = Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Pilih Folder Lain", fontSize = 11.sp)
                             }
 
                             OutlinedButton(
                                 onClick = {
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        try {
-                                            if (out.length() > 5 * 1024 * 1024) {
+                                    try {
+                                        saveFileLauncher.launch(suggestedExportFileName)
+                                    } catch (_: Throwable) {
+                                        // Auto-fallback to Downloads if system dialog cannot open!
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            try {
+                                                val msg = saveToPublicDownloads(context, out, suggestedExportFileName)
                                                 withContext(Dispatchers.Main) {
-                                                    Toast.makeText(context, "File terlalu besar untuk disalin sebagai Base64 (>5MB)", Toast.LENGTH_SHORT).show()
+                                                    statusMessage = "Dialog sistem tidak tersedia. $msg"
+                                                    isError = false
+                                                    Toast.makeText(context, statusMessage, Toast.LENGTH_LONG).show()
                                                 }
-                                                return@launch
-                                            }
-                                            val fileBytes = out.readBytes()
-                                            val b64 = Base64.toBase64String(fileBytes)
-                                            withContext(Dispatchers.Main) {
-                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                                val clip = ClipData.newPlainText("KripDroid Base64", b64)
-                                                clipboard.setPrimaryClip(clip)
-                                                Toast.makeText(context, "Hasil disalin sebagai Base64!", Toast.LENGTH_SHORT).show()
-                                            }
-                                        } catch (e: Throwable) {
-                                            withContext(Dispatchers.Main) {
-                                                statusMessage = "Gagal menyalin Base64: ${e.message}"
-                                                isError = true
+                                            } catch (e: Throwable) {
+                                                withContext(Dispatchers.Main) {
+                                                    statusMessage = "Gagal menyimpan: ${e.message}"
+                                                    isError = true
+                                                }
                                             }
                                         }
                                     }
                                 },
-                                modifier = Modifier.weight(0.9f)
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                             ) {
-                                Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text("Base64", fontSize = 10.sp, maxLines = 1)
+                                Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Simpan via Sistem", fontSize = 11.sp)
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Tertiary: Copy Base64
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    try {
+                                        if (out.length() > 5 * 1024 * 1024) {
+                                            withContext(Dispatchers.Main) {
+                                                Toast.makeText(context, "File terlalu besar untuk disalin sebagai Base64 (>5MB)", Toast.LENGTH_SHORT).show()
+                                            }
+                                            return@launch
+                                        }
+                                        val fileBytes = out.readBytes()
+                                        val b64 = Base64.toBase64String(fileBytes)
+                                        withContext(Dispatchers.Main) {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            val clip = ClipData.newPlainText("KripDroid Base64", b64)
+                                            clipboard.setPrimaryClip(clip)
+                                            Toast.makeText(context, "Hasil disalin sebagai Base64!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Throwable) {
+                                        withContext(Dispatchers.Main) {
+                                            statusMessage = "Gagal menyalin Base64: ${e.message}"
+                                            isError = true
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(vertical = 6.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Salin Hasil sebagai Base64", fontSize = 11.sp)
                         }
                     }
                 }
@@ -905,6 +953,34 @@ fun FileCryptoScreen(
                 processedResult = null
                 statusMessage = "File berhasil dipilih: ${selectedFile.name} (${formatSize(selectedFile.length())})"
                 isError = false
+            }
+        )
+    }
+
+    if (showInternalSaveDialog && processedOutputFile != null) {
+        val srcOut = processedOutputFile!!
+        InternalFilePickerDialog(
+            onDismiss = { showInternalSaveDialog = false },
+            isSaveMode = true,
+            defaultSaveFileName = suggestedExportFileName,
+            onSaveToDirectory = { targetDir, fileName ->
+                showInternalSaveDialog = false
+                coroutineScope.launch(Dispatchers.IO) {
+                    try {
+                        val destFile = File(targetDir, fileName)
+                        srcOut.copyTo(destFile, overwrite = true)
+                        withContext(Dispatchers.Main) {
+                            statusMessage = "Berhasil disimpan di: ${destFile.absolutePath}"
+                            isError = false
+                            Toast.makeText(context, "File berhasil disimpan di ${destFile.name}!", Toast.LENGTH_LONG).show()
+                        }
+                    } catch (e: Throwable) {
+                        withContext(Dispatchers.Main) {
+                            statusMessage = "Gagal menyimpan ke folder: ${e.message}"
+                            isError = true
+                        }
+                    }
+                }
             }
         )
     }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -336,6 +337,7 @@ fun TextCryptoScreen(
                                 isError = false
                             }
                         },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(
@@ -344,7 +346,7 @@ fun TextCryptoScreen(
                             modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Master Password", fontSize = 11.sp, maxLines = 1)
+                        Text("Master Password", fontSize = 11.sp)
                     }
 
                     OutlinedButton(
@@ -356,6 +358,7 @@ fun TextCryptoScreen(
                                 isError = false
                             }
                         },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(
@@ -365,7 +368,7 @@ fun TextCryptoScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Kunci Biometrik", fontSize = 11.sp, maxLines = 1)
+                        Text("Kunci Biometrik", fontSize = 11.sp)
                     }
                 }
             }
@@ -454,6 +457,7 @@ fun TextCryptoScreen(
                     executeEncrypt(effectiveKey)
                 },
                 enabled = !isProcessing,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -471,6 +475,7 @@ fun TextCryptoScreen(
                     executeDecrypt(effectiveKey)
                 },
                 enabled = !isProcessing,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.secondary,
@@ -483,7 +488,7 @@ fun TextCryptoScreen(
             }
         }
 
-        // Dedicated Biometric Action Buttons (User requested: "tombol enkripsi dekripsi pakai kunci biometrik")
+        // Dedicated Biometric Action Buttons
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -502,6 +507,7 @@ fun TextCryptoScreen(
                     }
                 },
                 enabled = !isProcessing,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.tertiary,
@@ -510,7 +516,7 @@ fun TextCryptoScreen(
             ) {
                 Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Enkripsi (Biometrik)", fontSize = 11.sp, maxLines = 1)
+                Text("Enkripsi Biometrik", fontSize = 11.sp)
             }
 
             Button(
@@ -527,6 +533,7 @@ fun TextCryptoScreen(
                     }
                 },
                 enabled = !isProcessing,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
@@ -535,7 +542,7 @@ fun TextCryptoScreen(
             ) {
                 Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Dekripsi (Biometrik)", fontSize = 11.sp, maxLines = 1)
+                Text("Dekripsi Biometrik", fontSize = 11.sp)
             }
         }
 

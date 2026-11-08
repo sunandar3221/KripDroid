@@ -7,12 +7,12 @@ import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -27,21 +27,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -68,7 +68,10 @@ import java.io.File
 @Composable
 fun InternalFilePickerDialog(
     onDismiss: () -> Unit,
-    onFileSelected: (File) -> Unit
+    onFileSelected: ((File) -> Unit)? = null,
+    isSaveMode: Boolean = false,
+    defaultSaveFileName: String = "",
+    onSaveToDirectory: ((targetDir: File, fileName: String) -> Unit)? = null
 ) {
     val context = LocalContext.current
 
@@ -85,13 +88,14 @@ fun InternalFilePickerDialog(
     var currentDir by remember { mutableStateOf(initialDir) }
     var fileList by remember { mutableStateOf<List<File>>(emptyList()) }
     var manualPathInput by remember { mutableStateOf("") }
+    var saveFileNameInput by remember { mutableStateOf(defaultSaveFileName) }
     var errorMessage by remember { mutableStateOf("") }
 
     fun refreshFiles(targetDir: File) {
         try {
             val list = targetDir.listFiles()
             if (list == null) {
-                errorMessage = "Folder tidak dapat dibaca (Izin ditolak atau folder kosong)"
+                errorMessage = "Folder tidak dapat dibaca (Akses dibatasi atau kosong)"
                 fileList = emptyList()
             } else {
                 errorMessage = ""
@@ -124,7 +128,7 @@ fun InternalFilePickerDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.96f)
-                .fillMaxHeight(0.90f)
+                .fillMaxHeight(0.92f)
                 .clip(RoundedCornerShape(16.dp)),
             color = MaterialTheme.colorScheme.background,
             tonalElevation = 6.dp
@@ -140,17 +144,20 @@ fun InternalFilePickerDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.Storage,
+                            imageVector = if (isSaveMode) Icons.Default.Save else Icons.Default.Storage,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Pengelola Berkas Internal",
-                            fontSize = 16.sp,
+                            text = if (isSaveMode) "Simpan File ke Folder" else "Pengelola Berkas Internal",
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
@@ -188,7 +195,7 @@ fun InternalFilePickerDialog(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    "Akses file lengkap terbatas",
+                                    text = "Akses penyimpanan penuh dibatasi",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
@@ -205,10 +212,11 @@ fun InternalFilePickerDialog(
                                             val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
                                             context.startActivity(intent)
                                         } catch (e: Exception) {
-                                            Toast.makeText(context, "Buka pengaturan izin manual: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Buka izin manual: ${e.message}", Toast.LENGTH_SHORT).show()
                                         }
                                     }
-                                }
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text("Beri Izin", fontSize = 10.sp)
                             }
@@ -237,7 +245,13 @@ fun InternalFilePickerDialog(
                             FilterChip(
                                 selected = currentDir.absolutePath == dir.absolutePath,
                                 onClick = { refreshFiles(dir) },
-                                label = { Text(label, fontSize = 11.sp) }
+                                label = { Text(label, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             )
                         }
                     }
@@ -325,15 +339,15 @@ fun InternalFilePickerDialog(
                                 .clickable {
                                     if (item.isDirectory) {
                                         refreshFiles(item)
-                                    } else {
-                                        onFileSelected(item)
+                                    } else if (!isSaveMode) {
+                                        onFileSelected?.invoke(item)
                                         onDismiss()
                                     }
                                 },
                             shape = RoundedCornerShape(8.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (item.isDirectory)
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                 else
                                     SurfaceContainerHigh
                             )
@@ -379,50 +393,97 @@ fun InternalFilePickerDialog(
                     }
                 }
 
-                // Manual Path Input Field
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceContainerHigh)
-                ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Text(
-                            text = "Ketik atau Tempel Path Berkas Manual:",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = manualPathInput,
-                                onValueChange = { manualPathInput = it },
-                                placeholder = { Text("/sdcard/Download/berkas.pdf", fontSize = 11.sp) },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
+                // Bottom Section: Save Mode or Pick Mode
+                if (isSaveMode) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = SurfaceContainerHigh)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "Nama File Simpan:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            Button(
-                                onClick = {
-                                    val trimmed = manualPathInput.trim()
-                                    if (trimmed.isEmpty()) return@Button
-                                    val target = File(trimmed)
-                                    if (target.exists()) {
-                                        if (target.isDirectory) {
-                                            refreshFiles(target)
-                                        } else {
-                                            onFileSelected(target)
-                                            onDismiss()
-                                        }
-                                    } else {
-                                        Toast.makeText(context, "Berkas/Folder tidak ditemukan!", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("Pilih", fontSize = 11.sp)
+                                OutlinedTextField(
+                                    value = saveFileNameInput,
+                                    onValueChange = { saveFileNameInput = it },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Button(
+                                    onClick = {
+                                        val trimmedName = saveFileNameInput.trim()
+                                        if (trimmedName.isNotEmpty()) {
+                                            onSaveToDirectory?.invoke(currentDir, trimmedName)
+                                            onDismiss()
+                                        } else {
+                                            Toast.makeText(context, "Nama file tidak boleh kosong!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                                ) {
+                                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Simpan Sini", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = SurfaceContainerHigh)
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text(
+                                text = "Ketik atau Tempel Path Berkas Manual:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = manualPathInput,
+                                    onValueChange = { manualPathInput = it },
+                                    placeholder = { Text("/sdcard/Download/berkas.pdf", fontSize = 11.sp) },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Button(
+                                    onClick = {
+                                        val trimmed = manualPathInput.trim()
+                                        if (trimmed.isEmpty()) return@Button
+                                        val target = File(trimmed)
+                                        if (target.exists()) {
+                                            if (target.isDirectory) {
+                                                refreshFiles(target)
+                                            } else {
+                                                onFileSelected?.invoke(target)
+                                                onDismiss()
+                                            }
+                                        } else {
+                                            Toast.makeText(context, "Berkas tidak ditemukan!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                                ) {
+                                    Text("Pilih", fontSize = 11.sp)
+                                }
                             }
                         }
                     }
