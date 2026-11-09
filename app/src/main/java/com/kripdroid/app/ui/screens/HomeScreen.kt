@@ -81,28 +81,35 @@ fun HomeScreen() {
 
     fun triggerBiometrics(onSuccess: (String) -> Unit) {
         val activity = with(BiometricHelper) { context.findFragmentActivity() }
-        if (activity != null) {
-            if (BiometricHelper.isBiometricAvailable(context)) {
-                BiometricHelper.authenticate(
-                    activity = activity,
-                    title = "Otentikasi Kunci Perangkat",
-                    subtitle = "Pindai sidik jari, wajah, atau PIN/Pola Anda",
-                    onSuccess = {
-                        val hwKey = KeystoreManager.getDeviceHardwareKey(context)
+
+        fun fallbackToMasterKey(reason: String) {
+            Toast.makeText(context, "$reason. Beralih ke Master Key...", Toast.LENGTH_SHORT).show()
+            pendingMasterKeyCallback = onSuccess
+            showMasterPassDialog = true
+        }
+
+        if (activity != null && BiometricHelper.isBiometricAvailable(context)) {
+            BiometricHelper.authenticate(
+                activity = activity,
+                title = "Otentikasi Kunci Biometrik",
+                subtitle = "Pindai sidik jari atau wajah Anda",
+                onSuccess = {
+                    try {
+                        val hwKey = KeystoreManager.getHardwareProtectedKey(context)
                         onSuccess(hwKey)
                         Toast.makeText(context, "Otentikasi biometrik berhasil!", Toast.LENGTH_SHORT).show()
-                    },
-                    onError = { err ->
-                        Toast.makeText(context, "Gagal biometrik: $err", Toast.LENGTH_SHORT).show()
+                    } catch (_: Exception) {
+                        fallbackToMasterKey("Gagal memuat kunci perangkat")
                     }
-                )
-            } else {
-                Toast.makeText(context, "Biometrik belum diaktifkan di sistem. Silakan gunakan Master Password.", Toast.LENGTH_LONG).show()
-                pendingMasterKeyCallback = onSuccess
-                showMasterPassDialog = true
-            }
+                },
+                onError = { err ->
+                    // Otomatis fallback ke Master Key jika biometrik gagal / dibatalkan!
+                    fallbackToMasterKey("Biometrik tidak dapat digunakan ($err)")
+                }
+            )
         } else {
-            Toast.makeText(context, "Tidak dapat mengakses aktivitas sistem", Toast.LENGTH_SHORT).show()
+            // Biometrik tidak tersedia atau tidak ada hardware biometrik -> fallback langsung ke Master Key!
+            fallbackToMasterKey("Sensor biometrik tidak tersedia")
         }
     }
 
@@ -234,7 +241,7 @@ fun HomeScreen() {
 
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Default.Key, contentDescription = null) },
-                        label = { Text("Ubah Kata Sandi Master") },
+                        label = { Text(if (KeystoreManager.hasMasterPassword(context)) "Ubah Kata Sandi Master" else "Buat Kata Sandi Master") },
                         selected = false,
                         onClick = {
                             coroutineScope.launch { drawerState.close() }

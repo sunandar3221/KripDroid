@@ -14,7 +14,6 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +33,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kripdroid.app.security.BiometricHelper
 import com.kripdroid.app.security.KeystoreManager
 import com.kripdroid.app.ui.theme.SurfaceContainerHigh
 
@@ -45,6 +45,7 @@ fun MasterPasswordDialog(
 ) {
     val context = LocalContext.current
     val hasPass = remember { KeystoreManager.hasMasterPassword(context) }
+    val biometricAvailable = remember { BiometricHelper.isBiometricAvailable(context) }
 
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -57,7 +58,7 @@ fun MasterPasswordDialog(
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
-                text = if (hasPass) "Kunci Perangkat (Android Keystore)" else "Buat Master Password Baru",
+                text = if (hasPass) "Otentikasi Master Key" else "Buat Master Key Baru",
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -67,9 +68,9 @@ fun MasterPasswordDialog(
             Column {
                 Text(
                     text = if (hasPass)
-                        "Masukkan Master Password Anda atau gunakan verifikasi biometrik perangkat untuk membuka kunci."
+                        "Masukkan Master Password Anda untuk membuka sesi enkripsi / dekripsi (Proteksi Zero-Knowledge RAM)."
                     else
-                        "Buat kata sandi master baru (minimal 4 karakter) untuk mengaktifkan fitur Kunci Perangkat.",
+                        "Buat kata sandi master baru (minimal 4 karakter) untuk mengamankan data Anda dengan proteksi anti-root & UBL.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -81,7 +82,7 @@ fun MasterPasswordDialog(
                         password = it
                         errorMessage = ""
                     },
-                    label = { Text("Kata Sandi Master") },
+                    label = { Text(if (hasPass) "Kata Sandi Master" else "Kata Sandi Master Baru") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -104,7 +105,7 @@ fun MasterPasswordDialog(
                             confirmPassword = it
                             errorMessage = ""
                         },
-                        label = { Text("Konfirmasi Kata Sandi") },
+                        label = { Text("Konfirmasi Kata Sandi Baru") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -112,7 +113,7 @@ fun MasterPasswordDialog(
                     )
                 }
 
-                if (hasPass) {
+                if (hasPass && biometricAvailable) {
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedButton(
                         onClick = onBiometricRequested,
@@ -143,7 +144,7 @@ fun MasterPasswordDialog(
                                 val key = KeystoreManager.getDeviceMasterKey(context, password)
                                 onSuccess(key)
                             } catch (e: Exception) {
-                                errorMessage = e.message ?: "Gagal mendapatkan kunci"
+                                errorMessage = e.message ?: "Gagal menurunkan kunci master"
                             }
                         } else {
                             errorMessage = "Kata sandi master salah"
@@ -159,7 +160,7 @@ fun MasterPasswordDialog(
                                 val key = KeystoreManager.getDeviceMasterKey(context, password)
                                 onSuccess(key)
                             } catch (e: Exception) {
-                                errorMessage = e.message ?: "Gagal menyimpan kata sandi"
+                                errorMessage = e.message ?: "Gagal menyimpan kata sandi master"
                             }
                         }
                     }

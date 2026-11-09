@@ -330,10 +330,17 @@ fun TextCryptoScreen(
                 ) {
                     OutlinedButton(
                         onClick = {
-                            onRequestMasterPasswordDialog { key ->
-                                keyText = key
-                                useDeviceKey = false
-                                statusMessage = "Kata sandi master diterapkan"
+                            if (!KeystoreManager.hasMasterPassword(context)) {
+                                onRequestMasterPasswordDialog { _ ->
+                                    useDeviceKey = true
+                                    keyText = KeystoreManager.MASTER_KEY_SENTINEL
+                                    statusMessage = "Master Key dibuat & diaktifkan"
+                                    isError = false
+                                }
+                            } else {
+                                useDeviceKey = true
+                                keyText = KeystoreManager.MASTER_KEY_SENTINEL
+                                statusMessage = "Mode Master Key aktif (Wajib masukin kata sandi master saat eksekusi)"
                                 isError = false
                             }
                         },
@@ -346,7 +353,7 @@ fun TextCryptoScreen(
                             modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Master Password", fontSize = 11.sp)
+                        Text("Master Key", fontSize = 11.sp)
                     }
 
                     OutlinedButton(
@@ -449,12 +456,22 @@ fun TextCryptoScreen(
         ) {
             Button(
                 onClick = {
-                    val effectiveKey = if (useDeviceKey) {
-                        KeystoreManager.resolveEffectiveKey(context, keyText)
-                    } else {
-                        keyText
+                    if (inputText.isEmpty()) {
+                        statusMessage = "Teks masukan tidak boleh kosong"
+                        isError = true
+                        return@Button
                     }
-                    executeEncrypt(effectiveKey)
+                    if (useDeviceKey || KeystoreManager.isDeviceKey(keyText)) {
+                        onRequestMasterPasswordDialog { effectiveKey ->
+                            executeEncrypt(effectiveKey)
+                        }
+                    } else if (selectedAlgo.needsKey && keyText.trim().isEmpty()) {
+                        onRequestMasterPasswordDialog { effectiveKey ->
+                            executeEncrypt(effectiveKey)
+                        }
+                    } else {
+                        executeEncrypt(keyText)
+                    }
                 },
                 enabled = !isProcessing,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
@@ -467,12 +484,22 @@ fun TextCryptoScreen(
 
             Button(
                 onClick = {
-                    val effectiveKey = if (useDeviceKey) {
-                        KeystoreManager.resolveEffectiveKey(context, keyText)
-                    } else {
-                        keyText
+                    if (inputText.isEmpty()) {
+                        statusMessage = "Teks masukan (ciphertext) tidak boleh kosong"
+                        isError = true
+                        return@Button
                     }
-                    executeDecrypt(effectiveKey)
+                    if (useDeviceKey || KeystoreManager.isDeviceKey(keyText)) {
+                        onRequestMasterPasswordDialog { effectiveKey ->
+                            executeDecrypt(effectiveKey)
+                        }
+                    } else if (selectedAlgo.needsKey && keyText.trim().isEmpty()) {
+                        onRequestMasterPasswordDialog { effectiveKey ->
+                            executeDecrypt(effectiveKey)
+                        }
+                    } else {
+                        executeDecrypt(keyText)
+                    }
                 },
                 enabled = !isProcessing,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),

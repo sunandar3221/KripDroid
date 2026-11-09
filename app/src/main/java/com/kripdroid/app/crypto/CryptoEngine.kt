@@ -11,6 +11,18 @@ object CryptoEngine {
 
     private val secureRandom = SecureRandom()
 
+    fun zeroize(bytes: ByteArray?) {
+        if (bytes != null) {
+            java.util.Arrays.fill(bytes, 0.toByte())
+        }
+    }
+
+    fun zeroize(chars: CharArray?) {
+        if (chars != null) {
+            java.util.Arrays.fill(chars, '\u0000')
+        }
+    }
+
     fun deriveKeyArgon2id(passphrase: String, salt: ByteArray?, targetBytes: Int): ByteArray {
         if (targetBytes <= 0) return passphrase.toByteArray(Charsets.UTF_8)
         val effectiveSalt = if (salt == null || salt.isEmpty()) {
@@ -95,19 +107,23 @@ object CryptoEngine {
             ByteArray(0)
         }
 
-        return when (algoId.lowercase()) {
-            "caesar" -> Pair(ClassicCiphers.caesarBytes(plain, keyStr, decrypt = false), ByteArray(0))
-            "rot13" -> Pair(ClassicCiphers.rot13Bytes(plain, decrypt = false), ByteArray(0))
-            "atbash" -> Pair(ClassicCiphers.atbashBytes(plain), ByteArray(0))
-            "vigenere" -> Pair(ClassicCiphers.vigenereBytes(plain, keyStr, decrypt = false), ByteArray(0))
-            "xor" -> Pair(ClassicCiphers.xorCipher(plain, keyStr.toByteArray(Charsets.UTF_8)), ByteArray(0))
-            "des" -> LegacyCiphers.desEncrypt(plain, key, customIv)
-            "tripledes" -> LegacyCiphers.tripleDesEncrypt(plain, key, customIv)
-            "blowfish" -> LegacyCiphers.blowfishEncrypt(plain, key, customIv)
-            "aes128cbc", "aes256cbc" -> ModernCiphers.aesCbcEncrypt(plain, key, customIv)
-            "aes128gcm", "aes256gcm" -> ModernCiphers.aesGcmEncrypt(plain, key, customIv)
-            "chacha20poly1305" -> ModernCiphers.chaCha20Poly1305Encrypt(plain, key, customIv)
-            else -> throw IllegalArgumentException("Algoritma belum didukung: $algoId")
+        try {
+            return when (algoId.lowercase()) {
+                "caesar" -> Pair(ClassicCiphers.caesarBytes(plain, keyStr, decrypt = false), ByteArray(0))
+                "rot13" -> Pair(ClassicCiphers.rot13Bytes(plain, decrypt = false), ByteArray(0))
+                "atbash" -> Pair(ClassicCiphers.atbashBytes(plain), ByteArray(0))
+                "vigenere" -> Pair(ClassicCiphers.vigenereBytes(plain, keyStr, decrypt = false), ByteArray(0))
+                "xor" -> Pair(ClassicCiphers.xorCipher(plain, keyStr.toByteArray(Charsets.UTF_8)), ByteArray(0))
+                "des" -> LegacyCiphers.desEncrypt(plain, key, customIv)
+                "tripledes" -> LegacyCiphers.tripleDesEncrypt(plain, key, customIv)
+                "blowfish" -> LegacyCiphers.blowfishEncrypt(plain, key, customIv)
+                "aes128cbc", "aes256cbc" -> ModernCiphers.aesCbcEncrypt(plain, key, customIv)
+                "aes128gcm", "aes256gcm" -> ModernCiphers.aesGcmEncrypt(plain, key, customIv)
+                "chacha20poly1305" -> ModernCiphers.chaCha20Poly1305Encrypt(plain, key, customIv)
+                else -> throw IllegalArgumentException("Algoritma belum didukung: $algoId")
+            }
+        } finally {
+            zeroize(key)
         }
     }
 
@@ -135,19 +151,23 @@ object CryptoEngine {
 
         val safeIv = iv ?: ByteArray(0)
 
-        return when (algoId.lowercase()) {
-            "caesar" -> ClassicCiphers.caesarBytes(cipherData, keyStr, decrypt = true)
-            "rot13" -> ClassicCiphers.rot13Bytes(cipherData, decrypt = true)
-            "atbash" -> ClassicCiphers.atbashBytes(cipherData)
-            "vigenere" -> ClassicCiphers.vigenereBytes(cipherData, keyStr, decrypt = true)
-            "xor" -> ClassicCiphers.xorCipher(cipherData, keyStr.toByteArray(Charsets.UTF_8))
-            "des" -> LegacyCiphers.desDecrypt(cipherData, key, safeIv)
-            "tripledes" -> LegacyCiphers.tripleDesDecrypt(cipherData, key, safeIv)
-            "blowfish" -> LegacyCiphers.blowfishDecrypt(cipherData, key, safeIv)
-            "aes128cbc", "aes256cbc" -> ModernCiphers.aesCbcDecrypt(cipherData, key, safeIv)
-            "aes128gcm", "aes256gcm" -> ModernCiphers.aesGcmDecrypt(cipherData, key, safeIv)
-            "chacha20poly1305" -> ModernCiphers.chaCha20Poly1305Decrypt(cipherData, key, safeIv)
-            else -> throw IllegalArgumentException("Algoritma belum didukung: $algoId")
+        try {
+            return when (algoId.lowercase()) {
+                "caesar" -> ClassicCiphers.caesarBytes(cipherData, keyStr, decrypt = true)
+                "rot13" -> ClassicCiphers.rot13Bytes(cipherData, decrypt = true)
+                "atbash" -> ClassicCiphers.atbashBytes(cipherData)
+                "vigenere" -> ClassicCiphers.vigenereBytes(cipherData, keyStr, decrypt = true)
+                "xor" -> ClassicCiphers.xorCipher(cipherData, keyStr.toByteArray(Charsets.UTF_8))
+                "des" -> LegacyCiphers.desDecrypt(cipherData, key, safeIv)
+                "tripledes" -> LegacyCiphers.tripleDesDecrypt(cipherData, key, safeIv)
+                "blowfish" -> LegacyCiphers.blowfishDecrypt(cipherData, key, safeIv)
+                "aes128cbc", "aes256cbc" -> ModernCiphers.aesCbcDecrypt(cipherData, key, safeIv)
+                "aes128gcm", "aes256gcm" -> ModernCiphers.aesGcmDecrypt(cipherData, key, safeIv)
+                "chacha20poly1305" -> ModernCiphers.chaCha20Poly1305Decrypt(cipherData, key, safeIv)
+                else -> throw IllegalArgumentException("Algoritma belum didukung: $algoId")
+            }
+        } finally {
+            zeroize(key)
         }
     }
 

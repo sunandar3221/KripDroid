@@ -239,8 +239,8 @@ fun SettingsScreen(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 SettingsItemRow(
                     icon = Icons.Default.Security,
-                    title = "Android KeyStore",
-                    subtitle = "Hardware-backed AES-256 Master Key",
+                    title = "Android KeyStore & Anti-Root/UBL",
+                    subtitle = "Zero-Knowledge RAM & Hardware TEE Protection",
                     action = {
                         Icon(
                             imageVector = Icons.Default.VerifiedUser,
@@ -254,7 +254,7 @@ fun SettingsScreen(
                 SettingsItemRow(
                     icon = Icons.Default.Fingerprint,
                     title = "Sensor Biometrik Perangkat",
-                    subtitle = if (BiometricHelper.isBiometricAvailable(context)) "Didukung & Siap Digunakan" else "Tidak Tersedia",
+                    subtitle = if (BiometricHelper.isBiometricAvailable(context)) "Didukung & Siap Digunakan" else "Tidak Tersedia (Fallback ke Master Key)",
                     action = {
                         OutlinedButton(onClick = onTestBiometricRequested) {
                             Text("Uji Coba", fontSize = 11.sp)
@@ -264,8 +264,8 @@ fun SettingsScreen(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 SettingsItemRow(
                     icon = Icons.Default.Key,
-                    title = "Master Password",
-                    subtitle = if (KeystoreManager.hasMasterPassword(context)) "Sudah Dikonfigurasi" else "Belum Dibuat",
+                    title = "Master Key",
+                    subtitle = if (KeystoreManager.hasMasterPassword(context)) "Sudah Dikonfigurasi (Tersimpan Aman)" else "Belum Dibuat",
                     action = {
                         Button(onClick = onChangeMasterPassRequested) {
                             Text(if (KeystoreManager.hasMasterPassword(context)) "Ubah" else "Buat", fontSize = 11.sp)

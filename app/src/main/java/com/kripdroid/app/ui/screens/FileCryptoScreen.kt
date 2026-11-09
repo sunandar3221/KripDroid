@@ -581,10 +581,17 @@ fun FileCryptoScreen(
                 ) {
                     OutlinedButton(
                         onClick = {
-                            onRequestMasterPasswordDialog { key ->
-                                keyText = key
-                                useDeviceKey = false
-                                statusMessage = "Kata sandi master diterapkan"
+                            if (!KeystoreManager.hasMasterPassword(context)) {
+                                onRequestMasterPasswordDialog { _ ->
+                                    useDeviceKey = true
+                                    keyText = KeystoreManager.MASTER_KEY_SENTINEL
+                                    statusMessage = "Master Key dibuat & diaktifkan"
+                                    isError = false
+                                }
+                            } else {
+                                useDeviceKey = true
+                                keyText = KeystoreManager.MASTER_KEY_SENTINEL
+                                statusMessage = "Mode Master Key aktif (Wajib masukin kata sandi master saat eksekusi)"
                                 isError = false
                             }
                         },
@@ -597,7 +604,7 @@ fun FileCryptoScreen(
                             modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Master Password", fontSize = 11.sp)
+                        Text("Master Key", fontSize = 11.sp)
                     }
 
                     OutlinedButton(
@@ -677,12 +684,19 @@ fun FileCryptoScreen(
         ) {
             Button(
                 onClick = {
-                    val effectiveKey = if (useDeviceKey) {
-                        KeystoreManager.resolveEffectiveKey(context, keyText)
-                    } else {
-                        keyText
+                    val uri = loadedUri
+                    if (uri == null) {
+                        statusMessage = "Pilih file terlebih dahulu!"
+                        isError = true
+                        return@Button
                     }
-                    executeFileEncrypt(effectiveKey)
+                    if (useDeviceKey || KeystoreManager.isDeviceKey(keyText) || keyText.trim().isEmpty()) {
+                        onRequestMasterPasswordDialog { effectiveKey ->
+                            executeFileEncrypt(effectiveKey)
+                        }
+                    } else {
+                        executeFileEncrypt(keyText)
+                    }
                 },
                 enabled = !isProcessing,
                 modifier = Modifier.weight(1f)
@@ -694,12 +708,19 @@ fun FileCryptoScreen(
 
             Button(
                 onClick = {
-                    val effectiveKey = if (useDeviceKey) {
-                        KeystoreManager.resolveEffectiveKey(context, keyText)
-                    } else {
-                        keyText
+                    val uri = loadedUri
+                    if (uri == null) {
+                        statusMessage = "Pilih file terenkripsi terlebih dahulu!"
+                        isError = true
+                        return@Button
                     }
-                    executeFileDecrypt(effectiveKey)
+                    if (useDeviceKey || KeystoreManager.isDeviceKey(keyText) || keyText.trim().isEmpty()) {
+                        onRequestMasterPasswordDialog { effectiveKey ->
+                            executeFileDecrypt(effectiveKey)
+                        }
+                    } else {
+                        executeFileDecrypt(keyText)
+                    }
                 },
                 enabled = !isProcessing,
                 modifier = Modifier.weight(1f),

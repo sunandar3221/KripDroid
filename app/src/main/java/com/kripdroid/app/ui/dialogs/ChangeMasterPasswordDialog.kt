@@ -39,6 +39,7 @@ fun ChangeMasterPasswordDialog(
     onSuccess: () -> Unit
 ) {
     val context = LocalContext.current
+    val hasPass = remember { KeystoreManager.hasMasterPassword(context) }
     var oldPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -51,7 +52,7 @@ fun ChangeMasterPasswordDialog(
         shape = RoundedCornerShape(16.dp),
         title = {
             Text(
-                text = "Ubah Kata Sandi Master",
+                text = if (hasPass) "Ubah Kata Sandi Master" else "Buat Master Key Baru",
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -59,26 +60,39 @@ fun ChangeMasterPasswordDialog(
         },
         text = {
             Column {
-                OutlinedTextField(
-                    value = oldPassword,
-                    onValueChange = {
-                        oldPassword = it
-                        errorMessage = ""
-                    },
-                    label = { Text("Kata Sandi Lama") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                Text(
+                    text = if (hasPass)
+                        "Masukkan kata sandi master lama untuk memverifikasi identitas, lalu tentukan kata sandi baru."
+                    else
+                        "Buat kata sandi master baru (minimal 4 karakter) untuk mengamankan enkripsi & dekripsi dengan proteksi anti-root / UBL.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (hasPass) {
+                    OutlinedTextField(
+                        value = oldPassword,
+                        onValueChange = {
+                            oldPassword = it
+                            errorMessage = ""
+                        },
+                        label = { Text("Kata Sandi Lama") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 OutlinedTextField(
                     value = newPassword,
                     onValueChange = {
                         newPassword = it
                         errorMessage = ""
                     },
-                    label = { Text("Kata Sandi Baru (Min. 4 karakter)") },
+                    label = { Text(if (hasPass) "Kata Sandi Baru (Min. 4 karakter)" else "Kata Sandi Master Baru (Min. 4 karakter)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -125,15 +139,19 @@ fun ChangeMasterPasswordDialog(
                         errorMessage = "Konfirmasi kata sandi tidak cocok"
                     } else {
                         try {
-                            KeystoreManager.changeMasterPassword(context, oldPassword, newPassword)
+                            if (hasPass) {
+                                KeystoreManager.changeMasterPassword(context, oldPassword, newPassword)
+                            } else {
+                                KeystoreManager.setMasterPassword(context, newPassword)
+                            }
                             onSuccess()
                         } catch (e: Exception) {
-                            errorMessage = e.message ?: "Gagal mengubah kata sandi"
+                            errorMessage = e.message ?: "Gagal memproses kata sandi"
                         }
                     }
                 }
             ) {
-                Text("Simpan Perubahan")
+                Text(if (hasPass) "Simpan Perubahan" else "Simpan & Buat Master Key")
             }
         },
         dismissButton = {

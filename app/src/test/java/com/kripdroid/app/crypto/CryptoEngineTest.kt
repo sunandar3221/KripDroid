@@ -98,4 +98,31 @@ class CryptoEngineTest {
         assertEquals(".pdf", decResult.originalExt)
         assertTrue(plain.contentEquals(decResult.plainData))
     }
+
+    @Test
+    fun testZeroizeMemoryScrubbing() {
+        val sensitive = byteArrayOf(1, 2, 3, 4, 5, 99, 127)
+        CryptoEngine.zeroize(sensitive)
+        for (b in sensitive) {
+            assertEquals(0.toByte(), b)
+        }
+
+        val sensitiveChars = charArrayOf('p', 'a', 's', 's', 'w', 'o', 'r', 'd')
+        CryptoEngine.zeroize(sensitiveChars)
+        for (c in sensitiveChars) {
+            assertEquals('\u0000', c)
+        }
+    }
+
+    @Test
+    fun testArgon2idDerivation() {
+        val salt = "FixedSalt16Bytes".toByteArray(Charsets.UTF_8)
+        val key1 = CryptoEngine.deriveKeyArgon2id("MyMasterPass", salt, 32)
+        val key2 = CryptoEngine.deriveKeyArgon2id("MyMasterPass", salt, 32)
+        val key3 = CryptoEngine.deriveKeyArgon2id("DifferentPass", salt, 32)
+
+        assertEquals(32, key1.size)
+        assertTrue("Argon2id should be deterministic for same pass and salt", key1.contentEquals(key2))
+        assertTrue("Argon2id should differ for different pass", !key1.contentEquals(key3))
+    }
 }
