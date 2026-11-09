@@ -11,3 +11,4 @@ local.properties
 build/
 app/build/
 release_artifacts/
+*.apk
