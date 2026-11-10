@@ -31,9 +31,11 @@ import com.kripdroid.app.ui.theme.SurfaceContainerHigh
 fun GuideScreen(
     modifier: Modifier = Modifier
 ) {
+    val modernList = CryptoAlgorithms.list.filter { it.category == SecurityCategory.Modern }
+    val encodingList = CryptoAlgorithms.list.filter { it.category == SecurityCategory.Encoding }
+    val hashList = CryptoAlgorithms.list.filter { it.category == SecurityCategory.Hash }
     val classicList = CryptoAlgorithms.list.filter { it.category == SecurityCategory.Classic }
     val legacyList = CryptoAlgorithms.list.filter { it.category == SecurityCategory.Legacy }
-    val modernList = CryptoAlgorithms.list.filter { it.category == SecurityCategory.Modern }
 
     LazyColumn(
         modifier = modifier
@@ -52,14 +54,14 @@ fun GuideScreen(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "PANDUAN KEAMANAN KRIPTOGRAFI",
+                        text = "PANDUAN SPEKTRUM KRIPTOGRAFI LENGKAP",
                         color = MaterialTheme.colorScheme.primary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Untuk dokumen penting, foto, atau video rahasia, gunakan AES-256 atau ChaCha20-Poly1305 yang dilindungi Argon2id. Sandi klasik hanya untuk pembelajaran.",
+                        text = "KripDroid mendukung 25 algoritma: Cipher Modern Standar Militer (AES-256, ChaCha20-Poly1305), Encoding & Sandi Populer (Kode Morse, Binary, Base64/32, Hex, Bacon), Fungsi Hash Satu Arah (SHA-256, SHA-512, MD5), serta Sandi Klasik & Legacy.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         lineHeight = 16.sp
@@ -67,7 +69,34 @@ fun GuideScreen(
                 }
             }
             Spacer(modifier = Modifier.height(6.dp))
-            SectionTitle(title = "1. TINGKAT DASAR (LATIHAN & BELAJAR)")
+            SectionTitle(title = "1. STANDAR MILITER & REKOMENDASI UTAMA")
+        }
+
+        items(modernList) { algo ->
+            AlgorithmInfoCard(algo = algo)
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(6.dp))
+            SectionTitle(title = "2. ENCODING & SANDI KOMUNIKASI")
+        }
+
+        items(encodingList) { algo ->
+            AlgorithmInfoCard(algo = algo)
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(6.dp))
+            SectionTitle(title = "3. HASH KRIPTOGRAFIS (SATU ARAH / CHECKSUM)")
+        }
+
+        items(hashList) { algo ->
+            AlgorithmInfoCard(algo = algo)
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(6.dp))
+            SectionTitle(title = "4. SANDI KLASIK (EDUKASI & SEJARAH)")
         }
 
         items(classicList) { algo ->
@@ -76,19 +105,10 @@ fun GuideScreen(
 
         item {
             Spacer(modifier = Modifier.height(6.dp))
-            SectionTitle(title = "2. TINGKAT MENENGAH (STANDAR LAMA)")
+            SectionTitle(title = "5. SANDI LEGACY (WARISAN)")
         }
 
         items(legacyList) { algo ->
-            AlgorithmInfoCard(algo = algo)
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(6.dp))
-            SectionTitle(title = "3. TINGKAT TERTINGGI (STANDAR MILITER - REKOMENDASI)")
-        }
-
-        items(modernList) { algo ->
             AlgorithmInfoCard(algo = algo)
         }
 

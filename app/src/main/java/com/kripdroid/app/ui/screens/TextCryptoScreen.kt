@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kripdroid.app.crypto.CryptoAlgorithms
 import com.kripdroid.app.crypto.CryptoEngine
+import com.kripdroid.app.crypto.SecurityCategory
 import com.kripdroid.app.security.KeystoreManager
 import com.kripdroid.app.ui.components.AlgorithmInfoCard
 import com.kripdroid.app.ui.components.SectionTitle
@@ -479,13 +480,25 @@ fun TextCryptoScreen(
             ) {
                 Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Enkripsi Teks", fontSize = 12.sp)
+                Text(
+                    text = when {
+                        selectedAlgo.isOneWay -> "Hitung Hash"
+                        selectedAlgo.category == SecurityCategory.Encoding -> "Encode Teks"
+                        else -> "Enkripsi Teks"
+                    },
+                    fontSize = 12.sp
+                )
             }
 
             Button(
                 onClick = {
                     if (inputText.isEmpty()) {
-                        statusMessage = "Teks masukan (ciphertext) tidak boleh kosong"
+                        statusMessage = "Teks masukan tidak boleh kosong"
+                        isError = true
+                        return@Button
+                    }
+                    if (selectedAlgo.isOneWay) {
+                        statusMessage = "Fungsi Hash (${selectedAlgo.name}) adalah satu arah (one-way digest) dan tidak dapat didekripsi."
                         isError = true
                         return@Button
                     }
@@ -511,65 +524,74 @@ fun TextCryptoScreen(
             ) {
                 Icon(imageVector = Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Dekripsi Teks", fontSize = 12.sp)
+                Text(
+                    text = when {
+                        selectedAlgo.isOneWay -> "Info Hash"
+                        selectedAlgo.category == SecurityCategory.Encoding -> "Decode Teks"
+                        else -> "Dekripsi Teks"
+                    },
+                    fontSize = 12.sp
+                )
             }
         }
 
-        // Dedicated Biometric Action Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = {
-                    if (inputText.isEmpty()) {
-                        statusMessage = "Teks masukan tidak boleh kosong"
-                        isError = true
-                        return@Button
-                    }
-                    onTriggerBiometrics { hwKey ->
-                        useDeviceKey = true
-                        keyText = KeystoreManager.DEVICE_KEY_SENTINEL
-                        executeEncrypt(hwKey)
-                    }
-                },
-                enabled = !isProcessing,
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary
-                )
+        // Dedicated Biometric Action Buttons (Only for algorithms that support hardware keys)
+        if (selectedAlgo.needsKey) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Enkripsi Biometrik", fontSize = 11.sp)
-            }
+                Button(
+                    onClick = {
+                        if (inputText.isEmpty()) {
+                            statusMessage = "Teks masukan tidak boleh kosong"
+                            isError = true
+                            return@Button
+                        }
+                        onTriggerBiometrics { hwKey ->
+                            useDeviceKey = true
+                            keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                            executeEncrypt(hwKey)
+                        }
+                    },
+                    enabled = !isProcessing,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary
+                    )
+                ) {
+                    Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Enkripsi Biometrik", fontSize = 11.sp)
+                }
 
-            Button(
-                onClick = {
-                    if (inputText.isEmpty()) {
-                        statusMessage = "Teks masukan (ciphertext) tidak boleh kosong"
-                        isError = true
-                        return@Button
-                    }
-                    onTriggerBiometrics { hwKey ->
-                        useDeviceKey = true
-                        keyText = KeystoreManager.DEVICE_KEY_SENTINEL
-                        executeDecrypt(hwKey)
-                    }
-                },
-                enabled = !isProcessing,
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            ) {
-                Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Dekripsi Biometrik", fontSize = 11.sp)
+                Button(
+                    onClick = {
+                        if (inputText.isEmpty()) {
+                            statusMessage = "Teks masukan (ciphertext) tidak boleh kosong"
+                            isError = true
+                            return@Button
+                        }
+                        onTriggerBiometrics { hwKey ->
+                            useDeviceKey = true
+                            keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                            executeDecrypt(hwKey)
+                        }
+                    },
+                    enabled = !isProcessing,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                ) {
+                    Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Dekripsi Biometrik", fontSize = 11.sp)
+                }
             }
         }
 

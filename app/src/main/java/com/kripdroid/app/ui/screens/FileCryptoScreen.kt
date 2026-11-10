@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.sp
 import com.kripdroid.app.crypto.CryptoAlgorithms
 import com.kripdroid.app.crypto.FileCrypto
 import com.kripdroid.app.crypto.FileProcessResult
+import com.kripdroid.app.crypto.SecurityCategory
 import com.kripdroid.app.security.KeystoreManager
 import com.kripdroid.app.ui.components.AlgorithmInfoCard
 import com.kripdroid.app.ui.components.SectionTitle
@@ -703,7 +704,14 @@ fun FileCryptoScreen(
             ) {
                 Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Enkripsi File", fontSize = 12.sp)
+                Text(
+                    text = when {
+                        selectedAlgo.isOneWay -> "Hitung Hash File"
+                        selectedAlgo.category == SecurityCategory.Encoding -> "Encode File"
+                        else -> "Enkripsi File"
+                    },
+                    fontSize = 12.sp
+                )
             }
 
             Button(
@@ -714,7 +722,12 @@ fun FileCryptoScreen(
                         isError = true
                         return@Button
                     }
-                    if (useDeviceKey || KeystoreManager.isDeviceKey(keyText) || keyText.trim().isEmpty()) {
+                    if (selectedAlgo.isOneWay) {
+                        statusMessage = "Fungsi Hash (${selectedAlgo.name}) adalah satu arah dan tidak dapat didekripsi."
+                        isError = true
+                        return@Button
+                    }
+                    if (useDeviceKey || KeystoreManager.isDeviceKey(keyText) || (selectedAlgo.needsKey && keyText.trim().isEmpty())) {
                         onRequestMasterPasswordDialog { effectiveKey ->
                             executeFileDecrypt(effectiveKey)
                         }
@@ -731,67 +744,76 @@ fun FileCryptoScreen(
             ) {
                 Icon(imageVector = Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Dekripsi File", fontSize = 12.sp)
+                Text(
+                    text = when {
+                        selectedAlgo.isOneWay -> "Info Hash"
+                        selectedAlgo.category == SecurityCategory.Encoding -> "Decode File"
+                        else -> "Dekripsi File"
+                    },
+                    fontSize = 12.sp
+                )
             }
         }
 
-        // Dedicated Biometric Action Buttons (User requested: "tombol enkripsi dekripsi pakai kunci biometrik")
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = {
-                    val uri = loadedUri
-                    if (uri == null) {
-                        statusMessage = "Pilih file terlebih dahulu!"
-                        isError = true
-                        return@Button
-                    }
-                    onTriggerBiometrics { hwKey ->
-                        useDeviceKey = true
-                        keyText = KeystoreManager.DEVICE_KEY_SENTINEL
-                        executeFileEncrypt(hwKey)
-                    }
-                },
-                enabled = !isProcessing,
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary
-                )
+        // Dedicated Biometric Action Buttons (Only for algorithms that support hardware keys)
+        if (selectedAlgo.needsKey) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Enkripsi Biometrik", fontSize = 11.sp)
-            }
+                Button(
+                    onClick = {
+                        val uri = loadedUri
+                        if (uri == null) {
+                            statusMessage = "Pilih file terlebih dahulu!"
+                            isError = true
+                            return@Button
+                        }
+                        onTriggerBiometrics { hwKey ->
+                            useDeviceKey = true
+                            keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                            executeFileEncrypt(hwKey)
+                        }
+                    },
+                    enabled = !isProcessing,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary
+                    )
+                ) {
+                    Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Enkripsi Biometrik", fontSize = 11.sp)
+                }
 
-            Button(
-                onClick = {
-                    val uri = loadedUri
-                    if (uri == null) {
-                        statusMessage = "Pilih file terenkripsi terlebih dahulu!"
-                        isError = true
-                        return@Button
-                    }
-                    onTriggerBiometrics { hwKey ->
-                        useDeviceKey = true
-                        keyText = KeystoreManager.DEVICE_KEY_SENTINEL
-                        executeFileDecrypt(hwKey)
-                    }
-                },
-                enabled = !isProcessing,
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            ) {
-                Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Dekripsi Biometrik", fontSize = 11.sp)
+                Button(
+                    onClick = {
+                        val uri = loadedUri
+                        if (uri == null) {
+                            statusMessage = "Pilih file terenkripsi terlebih dahulu!"
+                            isError = true
+                            return@Button
+                        }
+                        onTriggerBiometrics { hwKey ->
+                            useDeviceKey = true
+                            keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                            executeFileDecrypt(hwKey)
+                        }
+                    },
+                    enabled = !isProcessing,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                ) {
+                    Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Dekripsi Biometrik", fontSize = 11.sp)
+                }
             }
         }
 

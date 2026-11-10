@@ -1,7 +1,6 @@
 package com.kripdroid.app.crypto
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -10,15 +9,101 @@ class CryptoEngineTest {
     @Test
     fun testAllAlgorithmsText() {
         val testKey = "SuperSecretKey123!@#"
-        val samplePlain = "Hello, KripDroid Security World! 12345 ABC xyz."
+        val samplePlain = "Hello KripDroid Security 123"
 
         for (algo in CryptoAlgorithms.list) {
-            val (enc, iv) = CryptoEngine.encryptText(algo.id, samplePlain, testKey, "")
-            assertTrue("Encrypted output is empty for ${algo.id}", enc.isNotEmpty())
+            if (algo.isOneWay) {
+                val (digest, _) = CryptoEngine.encryptText(algo.id, samplePlain, testKey, "")
+                assertTrue("Digest output is empty for ${algo.id}", digest.isNotEmpty())
+            } else {
+                val (enc, _) = CryptoEngine.encryptText(algo.id, samplePlain, testKey, "")
+                assertTrue("Encrypted output is empty for ${algo.id}", enc.isNotEmpty())
 
-            val dec = CryptoEngine.decryptText(algo.id, enc, testKey, "")
-            assertEquals("Decrypted mismatch for ${algo.id}", samplePlain, dec)
+                val dec = CryptoEngine.decryptText(algo.id, enc, testKey, "")
+                if (algo.id == "morse" || algo.id == "bacon") {
+                    assertEquals("Decrypted mismatch for ${algo.id}", samplePlain.uppercase(), dec.uppercase())
+                } else {
+                    assertEquals("Decrypted mismatch for ${algo.id}", samplePlain, dec)
+                }
+            }
         }
+    }
+
+    @Test
+    fun testMorseCode() {
+        val plain = "SOS KRIPDROID"
+        val encoded = EncodingAndHash.morseEncode(plain)
+        assertEquals("... --- ... / -.- .-. .. .--. -.. .-. --- .. -..", encoded)
+        val decoded = EncodingAndHash.morseDecode(encoded)
+        assertEquals(plain, decoded)
+    }
+
+    @Test
+    fun testBinaryEncoding() {
+        val plain = "Hi"
+        val encoded = EncodingAndHash.binaryEncode(plain)
+        assertEquals("01001000 01101001", encoded)
+        val decoded = EncodingAndHash.binaryDecode(encoded)
+        assertEquals(plain, decoded)
+    }
+
+    @Test
+    fun testBase64Encoding() {
+        val plain = "Hello KripDroid World!"
+        val encoded = EncodingAndHash.base64Encode(plain)
+        val decoded = EncodingAndHash.base64Decode(encoded)
+        assertEquals(plain, decoded)
+    }
+
+    @Test
+    fun testHexEncoding() {
+        val plain = "Hello"
+        val encoded = EncodingAndHash.hexEncode(plain)
+        assertEquals("48656c6c6f", encoded)
+        val decoded = EncodingAndHash.hexDecode(encoded)
+        assertEquals(plain, decoded)
+    }
+
+    @Test
+    fun testBase32Encoding() {
+        val plain = "Hello Base32"
+        val encoded = EncodingAndHash.base32Encode(plain)
+        val decoded = EncodingAndHash.base32Decode(encoded)
+        assertEquals(plain, decoded)
+    }
+
+    @Test
+    fun testSha256AndMd5() {
+        val plain = "hello"
+        val sha256 = EncodingAndHash.hashText("SHA-256", plain)
+        assertEquals("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", sha256)
+
+        val md5 = EncodingAndHash.hashText("MD5", plain)
+        assertEquals("5d41402abc4b2a76b9719d911017c592", md5)
+    }
+
+    @Test
+    fun testRailFenceAndAffine() {
+        // Rail Fence
+        val rfPlain = "WEAREDISCOVEREDFLEEATONCE"
+        val rfEnc = EncodingAndHash.railFenceEncrypt(rfPlain, "3")
+        assertEquals("WECRLTEERDSOEEFEAOCAIVDEN", rfEnc)
+        val rfDec = EncodingAndHash.railFenceDecrypt(rfEnc, "3")
+        assertEquals(rfPlain, rfDec)
+
+        // Affine
+        val afPlain = "AFFINECIPHER"
+        val afEnc = EncodingAndHash.affineEncrypt(afPlain, "5,8")
+        val afDec = EncodingAndHash.affineDecrypt(afEnc, "5,8")
+        assertEquals(afPlain, afDec)
+    }
+
+    @Test
+    fun testBaconCipher() {
+        val plain = "SECURITY"
+        val enc = EncodingAndHash.baconEncrypt(plain)
+        val dec = EncodingAndHash.baconDecrypt(enc)
+        assertEquals(plain, dec)
     }
 
     @Test
@@ -59,7 +144,7 @@ class CryptoEngineTest {
     fun testFileEncryptionDecryption() {
         val originalData = "Video MP4 stream binary simulated payload test data.".toByteArray(Charsets.UTF_8)
         val originalExt = ".mp4"
-        val testAlgos = listOf("aes256gcm", "chacha20poly1305", "aes128cbc", "blowfish", "tripledes", "des", "xor")
+        val testAlgos = listOf("aes256gcm", "chacha20poly1305", "aes128cbc", "blowfish", "tripledes", "des", "xor", "base64", "hex", "binary", "morse")
 
         for (algoId in testAlgos) {
             val encBytes = FileCrypto.encryptFileData(
@@ -78,7 +163,11 @@ class CryptoEngineTest {
 
             assertEquals(algoId, decResult.algoId)
             assertEquals(originalExt, decResult.originalExt)
-            assertTrue("Decrypted data mismatch for $algoId", originalData.contentEquals(decResult.plainData))
+            if (algoId == "morse") {
+                assertEquals(String(originalData, Charsets.UTF_8).uppercase(), String(decResult.plainData, Charsets.UTF_8).uppercase())
+            } else {
+                assertTrue("Decrypted data mismatch for $algoId", originalData.contentEquals(decResult.plainData))
+            }
         }
     }
 

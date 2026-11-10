@@ -113,7 +113,19 @@ object CryptoEngine {
                 "rot13" -> Pair(ClassicCiphers.rot13Bytes(plain, decrypt = false), ByteArray(0))
                 "atbash" -> Pair(ClassicCiphers.atbashBytes(plain), ByteArray(0))
                 "vigenere" -> Pair(ClassicCiphers.vigenereBytes(plain, keyStr, decrypt = false), ByteArray(0))
+                "railfence" -> Pair(EncodingAndHash.railFenceBytes(plain, keyStr, decrypt = false), ByteArray(0))
+                "affine" -> Pair(EncodingAndHash.affineBytes(plain, keyStr, decrypt = false), ByteArray(0))
                 "xor" -> Pair(ClassicCiphers.xorCipher(plain, keyStr.toByteArray(Charsets.UTF_8)), ByteArray(0))
+                "morse" -> Pair(EncodingAndHash.morseBytes(plain, decrypt = false), ByteArray(0))
+                "binary" -> Pair(EncodingAndHash.binaryBytes(plain, decrypt = false), ByteArray(0))
+                "base64" -> Pair(EncodingAndHash.base64Bytes(plain, decrypt = false), ByteArray(0))
+                "base32" -> Pair(EncodingAndHash.base32Bytes(plain, decrypt = false), ByteArray(0))
+                "hex" -> Pair(EncodingAndHash.hexBytes(plain, decrypt = false), ByteArray(0))
+                "bacon" -> Pair(EncodingAndHash.baconBytes(plain, decrypt = false), ByteArray(0))
+                "sha256" -> Pair(EncodingAndHash.hashBytes("SHA-256", plain), ByteArray(0))
+                "sha512" -> Pair(EncodingAndHash.hashBytes("SHA-512", plain), ByteArray(0))
+                "sha1" -> Pair(EncodingAndHash.hashBytes("SHA-1", plain), ByteArray(0))
+                "md5" -> Pair(EncodingAndHash.hashBytes("MD5", plain), ByteArray(0))
                 "des" -> LegacyCiphers.desEncrypt(plain, key, customIv)
                 "tripledes" -> LegacyCiphers.tripleDesEncrypt(plain, key, customIv)
                 "blowfish" -> LegacyCiphers.blowfishEncrypt(plain, key, customIv)
@@ -157,7 +169,16 @@ object CryptoEngine {
                 "rot13" -> ClassicCiphers.rot13Bytes(cipherData, decrypt = true)
                 "atbash" -> ClassicCiphers.atbashBytes(cipherData)
                 "vigenere" -> ClassicCiphers.vigenereBytes(cipherData, keyStr, decrypt = true)
+                "railfence" -> EncodingAndHash.railFenceBytes(cipherData, keyStr, decrypt = true)
+                "affine" -> EncodingAndHash.affineBytes(cipherData, keyStr, decrypt = true)
                 "xor" -> ClassicCiphers.xorCipher(cipherData, keyStr.toByteArray(Charsets.UTF_8))
+                "morse" -> EncodingAndHash.morseBytes(cipherData, decrypt = true)
+                "binary" -> EncodingAndHash.binaryBytes(cipherData, decrypt = true)
+                "base64" -> EncodingAndHash.base64Bytes(cipherData, decrypt = true)
+                "base32" -> EncodingAndHash.base32Bytes(cipherData, decrypt = true)
+                "hex" -> EncodingAndHash.hexBytes(cipherData, decrypt = true)
+                "bacon" -> EncodingAndHash.baconBytes(cipherData, decrypt = true)
+                "sha256", "sha512", "sha1", "md5" -> throw UnsupportedOperationException("Fungsi Hash ($algoId) bersifat satu arah (one-way digest) dan tidak dapat didekripsi.")
                 "des" -> LegacyCiphers.desDecrypt(cipherData, key, safeIv)
                 "tripledes" -> LegacyCiphers.tripleDesDecrypt(cipherData, key, safeIv)
                 "blowfish" -> LegacyCiphers.blowfishDecrypt(cipherData, key, safeIv)
@@ -173,14 +194,26 @@ object CryptoEngine {
 
     fun encryptText(algoId: String, plainText: String, keyStr: String, ivStr: String): Pair<String, String> {
         val algo = CryptoAlgorithms.getAlgorithm(algoId)
-        if (algo.category == SecurityCategory.Classic && algoId != "xor") {
-            return when (algoId) {
-                "caesar" -> Pair(ClassicCiphers.caesarEncrypt(plainText, keyStr), "")
-                "rot13" -> Pair(ClassicCiphers.rot13(plainText), "")
-                "atbash" -> Pair(ClassicCiphers.atbash(plainText), "")
-                "vigenere" -> Pair(ClassicCiphers.vigenereEncrypt(plainText, keyStr), "")
-                else -> throw IllegalArgumentException("Unknown classic algorithm: $algoId")
-            }
+        val id = algoId.lowercase()
+
+        // Direct Text Transform for Classic, Encoding, and Hash
+        when (id) {
+            "caesar" -> return Pair(ClassicCiphers.caesarEncrypt(plainText, keyStr), "")
+            "rot13" -> return Pair(ClassicCiphers.rot13(plainText), "")
+            "atbash" -> return Pair(ClassicCiphers.atbash(plainText), "")
+            "vigenere" -> return Pair(ClassicCiphers.vigenereEncrypt(plainText, keyStr), "")
+            "railfence" -> return Pair(EncodingAndHash.railFenceEncrypt(plainText, keyStr), "")
+            "affine" -> return Pair(EncodingAndHash.affineEncrypt(plainText, keyStr), "")
+            "morse" -> return Pair(EncodingAndHash.morseEncode(plainText), "")
+            "binary" -> return Pair(EncodingAndHash.binaryEncode(plainText), "")
+            "base64" -> return Pair(EncodingAndHash.base64Encode(plainText), "")
+            "base32" -> return Pair(EncodingAndHash.base32Encode(plainText), "")
+            "hex" -> return Pair(EncodingAndHash.hexEncode(plainText), "")
+            "bacon" -> return Pair(EncodingAndHash.baconEncrypt(plainText), "")
+            "sha256" -> return Pair(EncodingAndHash.hashText("SHA-256", plainText), "")
+            "sha512" -> return Pair(EncodingAndHash.hashText("SHA-512", plainText), "")
+            "sha1" -> return Pair(EncodingAndHash.hashText("SHA-1", plainText), "")
+            "md5" -> return Pair(EncodingAndHash.hashText("MD5", plainText), "")
         }
 
         val ivBytes = parseIV(ivStr, algo.ivSize)
@@ -196,7 +229,7 @@ object CryptoEngine {
 
         val ivHex = if (usedIv.isNotEmpty()) Hex.toHexString(usedIv) else ""
 
-        if (algoId == "xor") {
+        if (id == "xor") {
             return Pair(Base64.toBase64String(cipherBytes), "")
         }
 
@@ -213,13 +246,23 @@ object CryptoEngine {
 
     fun decryptText(algoId: String, cipherText: String, keyStr: String, ivStr: String): String {
         val algo = CryptoAlgorithms.getAlgorithm(algoId)
-        if (algo.category == SecurityCategory.Classic && algoId != "xor") {
-            return when (algoId) {
-                "caesar" -> ClassicCiphers.caesarDecrypt(cipherText, keyStr)
-                "rot13" -> ClassicCiphers.rot13(cipherText)
-                "atbash" -> ClassicCiphers.atbash(cipherText)
-                "vigenere" -> ClassicCiphers.vigenereDecrypt(cipherText, keyStr)
-                else -> throw IllegalArgumentException("Unknown classic algorithm: $algoId")
+        val id = algoId.lowercase()
+
+        when (id) {
+            "caesar" -> return ClassicCiphers.caesarDecrypt(cipherText, keyStr)
+            "rot13" -> return ClassicCiphers.rot13(cipherText)
+            "atbash" -> return ClassicCiphers.atbash(cipherText)
+            "vigenere" -> return ClassicCiphers.vigenereDecrypt(cipherText, keyStr)
+            "railfence" -> return EncodingAndHash.railFenceDecrypt(cipherText, keyStr)
+            "affine" -> return EncodingAndHash.affineDecrypt(cipherText, keyStr)
+            "morse" -> return EncodingAndHash.morseDecode(cipherText)
+            "binary" -> return EncodingAndHash.binaryDecode(cipherText)
+            "base64" -> return EncodingAndHash.base64Decode(cipherText)
+            "base32" -> return EncodingAndHash.base32Decode(cipherText)
+            "hex" -> return EncodingAndHash.hexDecode(cipherText)
+            "bacon" -> return EncodingAndHash.baconDecrypt(cipherText)
+            "sha256", "sha512", "sha1", "md5" -> {
+                throw UnsupportedOperationException("Fungsi Hash ($algoId) adalah one-way digest dan tidak dapat didekripsi.")
             }
         }
 
@@ -234,7 +277,7 @@ object CryptoEngine {
             }
         }
 
-        if (algoId == "xor") {
+        if (id == "xor") {
             val dec = decryptBytesWithSalt(algoId, rawData, keyStr, null, null)
             return String(dec, Charsets.UTF_8)
         }

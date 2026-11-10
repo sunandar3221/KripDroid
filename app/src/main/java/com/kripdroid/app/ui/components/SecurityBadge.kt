@@ -22,6 +22,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kripdroid.app.crypto.SecurityCategory
+import com.kripdroid.app.ui.theme.BadgeEncodingBg
+import com.kripdroid.app.ui.theme.BadgeEncodingFg
+import com.kripdroid.app.ui.theme.BadgeHashBg
+import com.kripdroid.app.ui.theme.BadgeHashFg
 import com.kripdroid.app.ui.theme.BadgeMediumBg
 import com.kripdroid.app.ui.theme.BadgeMediumFg
 import com.kripdroid.app.ui.theme.BadgeStrongBg
@@ -37,6 +41,8 @@ fun SecurityBadge(
 ) {
     val (bgColor, fgColor) = when (category) {
         SecurityCategory.Classic -> Pair(BadgeWeakBg, BadgeWeakFg)
+        SecurityCategory.Encoding -> Pair(BadgeEncodingBg, BadgeEncodingFg)
+        SecurityCategory.Hash -> Pair(BadgeHashBg, BadgeHashFg)
         SecurityCategory.Legacy -> Pair(BadgeMediumBg, BadgeMediumFg)
         SecurityCategory.Modern -> Pair(BadgeStrongBg, BadgeStrongFg)
     }
