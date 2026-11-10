@@ -1,8 +1,5 @@
 package com.kripdroid.app.ui.screens
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
@@ -31,6 +28,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
@@ -49,15 +47,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -72,6 +69,7 @@ import com.kripdroid.app.ui.components.AlgorithmInfoCard
 import com.kripdroid.app.ui.components.SectionTitle
 import com.kripdroid.app.ui.components.StatusBanner
 import com.kripdroid.app.ui.theme.SurfaceContainerHigh
+import com.kripdroid.app.viewmodel.CryptoViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,101 +77,89 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TextCryptoScreen(
+    viewModel: CryptoViewModel,
     onRequestMasterPasswordDialog: (onSuccess: (String) -> Unit) -> Unit,
     onTriggerBiometrics: (onSuccess: (String) -> Unit) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
 
-    var selectedAlgoId by remember { mutableStateOf("aes256gcm") }
-    val selectedAlgo = remember(selectedAlgoId) { CryptoAlgorithms.getAlgorithm(selectedAlgoId) }
-
-    var inputText by remember { mutableStateOf("") }
-    var keyText by remember { mutableStateOf("") }
-    var ivText by remember { mutableStateOf("") }
-    var outputText by remember { mutableStateOf("") }
-
-    var isKeyMasked by remember { mutableStateOf(false) }
-    var showAdvancedIv by remember { mutableStateOf(false) }
-    var useDeviceKey by remember { mutableStateOf(false) }
-
-    var isProcessing by remember { mutableStateOf(false) }
-    var statusMessage by remember { mutableStateOf("") }
-    var isError by remember { mutableStateOf(false) }
+    val selectedAlgo = remember(viewModel.textSelectedAlgoId) { CryptoAlgorithms.getAlgorithm(viewModel.textSelectedAlgoId) }
 
     fun executeEncrypt(effectiveKey: String) {
-        if (inputText.isEmpty()) {
-            statusMessage = "Teks masukan tidak boleh kosong"
-            isError = true
+        if (viewModel.textInput.isEmpty()) {
+            viewModel.textStatusMessage = "Teks masukan tidak boleh kosong"
+            viewModel.textIsError = true
             return
         }
         if (selectedAlgo.needsKey && effectiveKey.isEmpty()) {
-            statusMessage = "Kunci/Kata sandi enkripsi tidak boleh kosong!"
-            isError = true
+            viewModel.textStatusMessage = "Kunci/Kata sandi enkripsi tidak boleh kosong!"
+            viewModel.textIsError = true
             return
         }
 
-        isProcessing = true
+        viewModel.textIsProcessing = true
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 val (enc, usedIv) = CryptoEngine.encryptText(
                     algoId = selectedAlgo.id,
-                    plainText = inputText,
+                    plainText = viewModel.textInput,
                     keyStr = effectiveKey,
-                    ivStr = ivText
+                    ivStr = viewModel.textIv
                 )
                 withContext(Dispatchers.Main) {
-                    outputText = enc
+                    viewModel.textOutput = enc
                     if (usedIv.isNotEmpty()) {
-                        ivText = usedIv
+                        viewModel.textIv = usedIv
                     }
-                    statusMessage = "Enkripsi berhasil diselesaikan (${selectedAlgo.name})"
-                    isError = false
-                    isProcessing = false
+                    viewModel.textStatusMessage = "Enkripsi / Proses berhasil (${selectedAlgo.name})"
+                    viewModel.textIsError = false
+                    viewModel.textIsProcessing = false
                 }
             } catch (e: Throwable) {
                 withContext(Dispatchers.Main) {
-                    statusMessage = "Gagal Enkripsi: ${e.message}"
-                    isError = true
-                    isProcessing = false
+                    viewModel.textStatusMessage = "Gagal Enkripsi: ${e.message}"
+                    viewModel.textIsError = true
+                    viewModel.textIsProcessing = false
                 }
             }
         }
     }
 
     fun executeDecrypt(effectiveKey: String) {
-        if (inputText.isEmpty()) {
-            statusMessage = "Teks ciphertext tidak boleh kosong"
-            isError = true
+        if (viewModel.textInput.isEmpty()) {
+            viewModel.textStatusMessage = "Teks ciphertext tidak boleh kosong"
+            viewModel.textIsError = true
             return
         }
         if (selectedAlgo.needsKey && effectiveKey.isEmpty()) {
-            statusMessage = "Kunci/Kata sandi dekripsi tidak boleh kosong!"
-            isError = true
+            viewModel.textStatusMessage = "Kunci/Kata sandi dekripsi tidak boleh kosong!"
+            viewModel.textIsError = true
             return
         }
 
-        isProcessing = true
+        viewModel.textIsProcessing = true
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 val dec = CryptoEngine.decryptText(
                     algoId = selectedAlgo.id,
-                    cipherText = inputText,
+                    cipherText = viewModel.textInput,
                     keyStr = effectiveKey,
-                    ivStr = ivText
+                    ivStr = viewModel.textIv
                 )
                 withContext(Dispatchers.Main) {
-                    outputText = dec
-                    statusMessage = "Dekripsi berhasil diselesaikan (${selectedAlgo.name})"
-                    isError = false
-                    isProcessing = false
+                    viewModel.textOutput = dec
+                    viewModel.textStatusMessage = "Dekripsi / Decode berhasil (${selectedAlgo.name})"
+                    viewModel.textIsError = false
+                    viewModel.textIsProcessing = false
                 }
             } catch (e: Throwable) {
                 withContext(Dispatchers.Main) {
-                    statusMessage = "Gagal Dekripsi: ${e.message}"
-                    isError = true
-                    isProcessing = false
+                    viewModel.textStatusMessage = "Gagal Dekripsi: ${e.message}"
+                    viewModel.textIsError = true
+                    viewModel.textIsProcessing = false
                 }
             }
         }
@@ -202,10 +188,10 @@ fun TextCryptoScreen(
         ) {
             CryptoAlgorithms.list.forEach { algo ->
                 FilterChip(
-                    selected = algo.id == selectedAlgoId,
+                    selected = algo.id == viewModel.textSelectedAlgoId,
                     onClick = {
-                        selectedAlgoId = algo.id
-                        statusMessage = ""
+                        viewModel.textSelectedAlgoId = algo.id
+                        viewModel.textStatusMessage = ""
                     },
                     label = { Text(algo.name, fontSize = 12.sp) },
                     colors = FilterChipDefaults.filterChipColors(
@@ -222,10 +208,10 @@ fun TextCryptoScreen(
         // Text Input Field
         SectionTitle(title = "MASUKAN TEKS")
         OutlinedTextField(
-            value = inputText,
+            value = viewModel.textInput,
             onValueChange = {
-                inputText = it
-                statusMessage = ""
+                viewModel.textInput = it
+                viewModel.textStatusMessage = ""
             },
             label = { Text("Ketik atau tempel teks di sini...") },
             modifier = Modifier
@@ -233,25 +219,25 @@ fun TextCryptoScreen(
                 .height(115.dp),
             supportingText = {
                 Text(
-                    text = "${inputText.length} karakter | ${inputText.toByteArray(Charsets.UTF_8).size} byte",
+                    text = "${viewModel.textInput.length} karakter | ${viewModel.textInput.toByteArray(Charsets.UTF_8).size} byte",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             trailingIcon = {
-                if (inputText.isNotEmpty()) {
-                    IconButton(onClick = { inputText = "" }) {
+                if (viewModel.textInput.isNotEmpty()) {
+                    IconButton(onClick = { viewModel.textInput = "" }) {
                         Icon(imageVector = Icons.Default.Clear, contentDescription = "Hapus")
                     }
                 }
             }
         )
 
-        // Key Input Field (if needed)
+        // Key Input Field (Only if algorithm needs key)
         if (selectedAlgo.needsKey) {
             SectionTitle(title = "KUNCI RAHASIA / KATA SANDI")
 
-            if (useDeviceKey) {
+            if (viewModel.textUseDeviceKey) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -293,8 +279,8 @@ fun TextCryptoScreen(
                         }
                         OutlinedButton(
                             onClick = {
-                                useDeviceKey = false
-                                keyText = ""
+                                viewModel.textUseDeviceKey = false
+                                viewModel.textKey = ""
                             }
                         ) {
                             Text("Manual", fontSize = 11.sp)
@@ -303,22 +289,22 @@ fun TextCryptoScreen(
                 }
             } else {
                 OutlinedTextField(
-                    value = keyText,
+                    value = viewModel.textKey,
                     onValueChange = {
-                        keyText = it
-                        statusMessage = ""
+                        viewModel.textKey = it
+                        viewModel.textStatusMessage = ""
                     },
                     label = { Text(selectedAlgo.keyDescription) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    visualTransformation = if (isKeyMasked) PasswordVisualTransformation() else VisualTransformation.None,
+                    visualTransformation = if (viewModel.textIsKeyMasked) PasswordVisualTransformation() else VisualTransformation.None,
                     keyboardOptions = KeyboardOptions(
-                        keyboardType = if (isKeyMasked) KeyboardType.Password else KeyboardType.Text
+                        keyboardType = if (viewModel.textIsKeyMasked) KeyboardType.Password else KeyboardType.Text
                     ),
                     trailingIcon = {
-                        IconButton(onClick = { isKeyMasked = !isKeyMasked }) {
+                        IconButton(onClick = { viewModel.textIsKeyMasked = !viewModel.textIsKeyMasked }) {
                             Icon(
-                                imageVector = if (isKeyMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                imageVector = if (viewModel.textIsKeyMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                 contentDescription = "Toggle Mask"
                             )
                         }
@@ -333,16 +319,16 @@ fun TextCryptoScreen(
                         onClick = {
                             if (!KeystoreManager.hasMasterPassword(context)) {
                                 onRequestMasterPasswordDialog { _ ->
-                                    useDeviceKey = true
-                                    keyText = KeystoreManager.MASTER_KEY_SENTINEL
-                                    statusMessage = "Master Key dibuat & diaktifkan"
-                                    isError = false
+                                    viewModel.textUseDeviceKey = true
+                                    viewModel.textKey = KeystoreManager.MASTER_KEY_SENTINEL
+                                    viewModel.textStatusMessage = "Master Key dibuat & diaktifkan"
+                                    viewModel.textIsError = false
                                 }
                             } else {
-                                useDeviceKey = true
-                                keyText = KeystoreManager.MASTER_KEY_SENTINEL
-                                statusMessage = "Mode Master Key aktif (Wajib masukin kata sandi master saat eksekusi)"
-                                isError = false
+                                viewModel.textUseDeviceKey = true
+                                viewModel.textKey = KeystoreManager.MASTER_KEY_SENTINEL
+                                viewModel.textStatusMessage = "Mode Master Key aktif (Wajib verifikasi saat eksekusi)"
+                                viewModel.textIsError = false
                             }
                         },
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
@@ -360,10 +346,10 @@ fun TextCryptoScreen(
                     OutlinedButton(
                         onClick = {
                             onTriggerBiometrics { _ ->
-                                useDeviceKey = true
-                                keyText = KeystoreManager.DEVICE_KEY_SENTINEL
-                                statusMessage = "Kunci Biometrik (Android KeyStore) diaktifkan"
-                                isError = false
+                                viewModel.textUseDeviceKey = true
+                                viewModel.textKey = KeystoreManager.DEVICE_KEY_SENTINEL
+                                viewModel.textStatusMessage = "Kunci Biometrik (Android KeyStore) diaktifkan"
+                                viewModel.textIsError = false
                             }
                         },
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
@@ -388,7 +374,7 @@ fun TextCryptoScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .clickable { showAdvancedIv = !showAdvancedIv }
+                    .clickable { viewModel.textShowAdvancedIv = !viewModel.textShowAdvancedIv }
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -400,19 +386,19 @@ fun TextCryptoScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (showAdvancedIv) "Sembunyikan Opsi Lanjutan IV/Nonce" else "Tampilkan Opsi Lanjutan IV/Nonce (Otomatis Acak)",
+                    text = if (viewModel.textShowAdvancedIv) "Sembunyikan Opsi Lanjutan IV/Nonce" else "Tampilkan Opsi Lanjutan IV/Nonce (Otomatis Acak)",
                     color = MaterialTheme.colorScheme.primary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
 
-            AnimatedVisibility(visible = showAdvancedIv) {
+            AnimatedVisibility(visible = viewModel.textShowAdvancedIv) {
                 OutlinedTextField(
-                    value = ivText,
+                    value = viewModel.textIv,
                     onValueChange = {
-                        ivText = it
-                        statusMessage = ""
+                        viewModel.textIv = it
+                        viewModel.textStatusMessage = ""
                     },
                     label = { Text("Kustom IV / Nonce (${selectedAlgo.ivSize} byte / Hex - Kosongkan untuk Acak)") },
                     singleLine = true,
@@ -422,7 +408,7 @@ fun TextCryptoScreen(
         }
 
         // Progress indicator for Text Crypto
-        AnimatedVisibility(visible = isProcessing) {
+        AnimatedVisibility(visible = viewModel.textIsProcessing) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -441,7 +427,7 @@ fun TextCryptoScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Memproses Argon2id & Kriptografi (${selectedAlgo.name})...",
+                        text = "Memproses kriptografi (${selectedAlgo.name})...",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -457,24 +443,24 @@ fun TextCryptoScreen(
         ) {
             Button(
                 onClick = {
-                    if (inputText.isEmpty()) {
-                        statusMessage = "Teks masukan tidak boleh kosong"
-                        isError = true
+                    if (viewModel.textInput.isEmpty()) {
+                        viewModel.textStatusMessage = "Teks masukan tidak boleh kosong"
+                        viewModel.textIsError = true
                         return@Button
                     }
-                    if (useDeviceKey || KeystoreManager.isDeviceKey(keyText)) {
-                        onRequestMasterPasswordDialog { effectiveKey ->
-                            executeEncrypt(effectiveKey)
-                        }
-                    } else if (selectedAlgo.needsKey && keyText.trim().isEmpty()) {
-                        onRequestMasterPasswordDialog { effectiveKey ->
-                            executeEncrypt(effectiveKey)
+                    if (selectedAlgo.needsKey) {
+                        if (viewModel.textUseDeviceKey || KeystoreManager.isDeviceKey(viewModel.textKey) || viewModel.textKey.trim().isEmpty()) {
+                            onRequestMasterPasswordDialog { effectiveKey ->
+                                executeEncrypt(effectiveKey)
+                            }
+                        } else {
+                            executeEncrypt(viewModel.textKey)
                         }
                     } else {
-                        executeEncrypt(keyText)
+                        executeEncrypt("")
                     }
                 },
-                enabled = !isProcessing,
+                enabled = !viewModel.textIsProcessing,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 modifier = Modifier.weight(1f)
             ) {
@@ -492,29 +478,29 @@ fun TextCryptoScreen(
 
             Button(
                 onClick = {
-                    if (inputText.isEmpty()) {
-                        statusMessage = "Teks masukan tidak boleh kosong"
-                        isError = true
+                    if (viewModel.textInput.isEmpty()) {
+                        viewModel.textStatusMessage = "Teks masukan tidak boleh kosong"
+                        viewModel.textIsError = true
                         return@Button
                     }
                     if (selectedAlgo.isOneWay) {
-                        statusMessage = "Fungsi Hash (${selectedAlgo.name}) adalah satu arah (one-way digest) dan tidak dapat didekripsi."
-                        isError = true
+                        viewModel.textStatusMessage = "Fungsi Hash (${selectedAlgo.name}) adalah satu arah (one-way digest) dan tidak dapat didekripsi."
+                        viewModel.textIsError = true
                         return@Button
                     }
-                    if (useDeviceKey || KeystoreManager.isDeviceKey(keyText)) {
-                        onRequestMasterPasswordDialog { effectiveKey ->
-                            executeDecrypt(effectiveKey)
-                        }
-                    } else if (selectedAlgo.needsKey && keyText.trim().isEmpty()) {
-                        onRequestMasterPasswordDialog { effectiveKey ->
-                            executeDecrypt(effectiveKey)
+                    if (selectedAlgo.needsKey) {
+                        if (viewModel.textUseDeviceKey || KeystoreManager.isDeviceKey(viewModel.textKey) || viewModel.textKey.trim().isEmpty()) {
+                            onRequestMasterPasswordDialog { effectiveKey ->
+                                executeDecrypt(effectiveKey)
+                            }
+                        } else {
+                            executeDecrypt(viewModel.textKey)
                         }
                     } else {
-                        executeDecrypt(keyText)
+                        executeDecrypt("")
                     }
                 },
-                enabled = !isProcessing,
+                enabled = !viewModel.textIsProcessing,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
@@ -535,7 +521,7 @@ fun TextCryptoScreen(
             }
         }
 
-        // Dedicated Biometric Action Buttons (Only for algorithms that support hardware keys)
+        // Dedicated Biometric Action Buttons (Only for algorithms that need keys)
         if (selectedAlgo.needsKey) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -543,18 +529,18 @@ fun TextCryptoScreen(
             ) {
                 Button(
                     onClick = {
-                        if (inputText.isEmpty()) {
-                            statusMessage = "Teks masukan tidak boleh kosong"
-                            isError = true
+                        if (viewModel.textInput.isEmpty()) {
+                            viewModel.textStatusMessage = "Teks masukan tidak boleh kosong"
+                            viewModel.textIsError = true
                             return@Button
                         }
                         onTriggerBiometrics { hwKey ->
-                            useDeviceKey = true
-                            keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                            viewModel.textUseDeviceKey = true
+                            viewModel.textKey = KeystoreManager.DEVICE_KEY_SENTINEL
                             executeEncrypt(hwKey)
                         }
                     },
-                    enabled = !isProcessing,
+                    enabled = !viewModel.textIsProcessing,
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
@@ -569,18 +555,18 @@ fun TextCryptoScreen(
 
                 Button(
                     onClick = {
-                        if (inputText.isEmpty()) {
-                            statusMessage = "Teks masukan (ciphertext) tidak boleh kosong"
-                            isError = true
+                        if (viewModel.textInput.isEmpty()) {
+                            viewModel.textStatusMessage = "Teks masukan (ciphertext) tidak boleh kosong"
+                            viewModel.textIsError = true
                             return@Button
                         }
                         onTriggerBiometrics { hwKey ->
-                            useDeviceKey = true
-                            keyText = KeystoreManager.DEVICE_KEY_SENTINEL
+                            viewModel.textUseDeviceKey = true
+                            viewModel.textKey = KeystoreManager.DEVICE_KEY_SENTINEL
                             executeDecrypt(hwKey)
                         }
                     },
-                    enabled = !isProcessing,
+                    enabled = !viewModel.textIsProcessing,
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
@@ -602,79 +588,96 @@ fun TextCryptoScreen(
         ) {
             OutlinedButton(
                 onClick = {
-                    val temp = inputText
-                    inputText = outputText
-                    outputText = temp
-                    statusMessage = "Masukan dan Keluaran telah ditukar"
-                    isError = false
+                    val temp = viewModel.textInput
+                    viewModel.textInput = viewModel.textOutput
+                    viewModel.textOutput = temp
+                    viewModel.textStatusMessage = "Teks masukan dan keluaran berhasil ditukar"
+                    viewModel.textIsError = false
                 },
+                enabled = viewModel.textOutput.isNotEmpty(),
                 modifier = Modifier.weight(1f)
             ) {
-                Icon(imageVector = Icons.Default.SwapVert, contentDescription = null, modifier = Modifier.size(14.dp))
+                Icon(imageVector = Icons.Default.SwapVert, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Tukar", fontSize = 11.sp)
+                Text("Tukar Teks", fontSize = 11.sp)
             }
 
             OutlinedButton(
                 onClick = {
-                    inputText = "Halo KripDroid! Ini contoh pesan rahasia dengan keamanan tingkat tinggi."
-                    if (selectedAlgo.needsKey && keyText.isEmpty() && !useDeviceKey) {
-                        keyText = "KunciRahasia123!"
-                    }
-                    statusMessage = "Contoh teks telah dimuat"
-                    isError = false
+                    viewModel.textInput = ""
+                    viewModel.textOutput = ""
+                    viewModel.textStatusMessage = "Semua bidang teks berhasil dibersihkan"
+                    viewModel.textIsError = false
                 },
                 modifier = Modifier.weight(1f)
             ) {
-                Text("Contoh Teks", fontSize = 11.sp)
-            }
-
-            OutlinedButton(
-                onClick = {
-                    inputText = ""
-                    outputText = ""
-                    ivText = ""
-                    statusMessage = ""
-                },
-                modifier = Modifier.weight(1f)
-            ) {
+                Icon(imageVector = Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text("Bersihkan", fontSize = 11.sp)
             }
         }
 
-        // Status Banner
-        StatusBanner(message = statusMessage, isError = isError)
-
-        // Output Result Card
-        SectionTitle(title = "HASIL KELUARAN")
+        // Output Text Field
+        SectionTitle(title = "HASIL KRIPTOGRAFI")
         OutlinedTextField(
-            value = outputText,
-            onValueChange = { outputText = it },
+            value = viewModel.textOutput,
+            onValueChange = { viewModel.textOutput = it },
             readOnly = true,
-            label = { Text("Hasil Enkripsi / Dekripsi") },
+            label = { Text("Keluaran teks akan muncul di sini") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(130.dp),
             supportingText = {
                 Text(
-                    text = "${outputText.length} karakter | ${outputText.toByteArray(Charsets.UTF_8).size} byte",
+                    text = "${viewModel.textOutput.length} karakter | ${viewModel.textOutput.toByteArray(Charsets.UTF_8).size} byte",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            },
-            trailingIcon = {
-                if (outputText.isNotEmpty()) {
-                    IconButton(onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("KripDroid Result", outputText)
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Hasil disalin ke papan klip!", Toast.LENGTH_SHORT).show()
-                    }) {
-                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Salin")
-                    }
-                }
             }
         )
+
+        // Copy & Share Output Buttons Row
+        if (viewModel.textOutput.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        clipboardManager.setText(AnnotatedString(viewModel.textOutput))
+                        Toast.makeText(context, "Teks hasil disalin ke papan klip!", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Salin Hasil", fontSize = 12.sp)
+                }
+
+                Button(
+                    onClick = {
+                        val shareIntent = android.content.Intent().apply {
+                            action = android.content.Intent.ACTION_SEND
+                            putExtra(android.content.Intent.EXTRA_TEXT, viewModel.textOutput)
+                            type = "text/plain"
+                        }
+                        context.startActivity(android.content.Intent.createChooser(shareIntent, "Bagikan Hasil KripDroid"))
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = MaterialTheme.colorScheme.onSecondary
+                    )
+                ) {
+                    Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Bagikan", fontSize = 12.sp)
+                }
+            }
+        }
+
+        // Status Message Banner
+        StatusBanner(message = viewModel.textStatusMessage, isError = viewModel.textIsError)
 
         Spacer(modifier = Modifier.height(24.dp))
     }

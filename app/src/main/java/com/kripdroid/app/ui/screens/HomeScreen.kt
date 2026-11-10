@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kripdroid.app.R
 import com.kripdroid.app.security.BiometricHelper
 import com.kripdroid.app.security.KeystoreManager
@@ -65,6 +66,7 @@ import com.kripdroid.app.ui.dialogs.ChangeMasterPasswordDialog
 import com.kripdroid.app.ui.dialogs.MasterPasswordDialog
 import com.kripdroid.app.ui.theme.SurfaceContainerHigh
 import com.kripdroid.app.ui.theme.SurfaceContainerLow
+import com.kripdroid.app.viewmodel.CryptoViewModel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,6 +75,7 @@ fun HomeScreen() {
     val context = LocalContext.current
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
+    val cryptoViewModel: CryptoViewModel = viewModel()
 
     var currentTab by remember { mutableIntStateOf(0) }
     var showMasterPassDialog by remember { mutableStateOf(false) }
@@ -343,6 +346,7 @@ fun HomeScreen() {
                 when (currentTab) {
                     0 -> GuideScreen()
                     1 -> TextCryptoScreen(
+                        viewModel = cryptoViewModel,
                         onRequestMasterPasswordDialog = { callback ->
                             pendingMasterKeyCallback = callback
                             showMasterPassDialog = true
@@ -352,6 +356,7 @@ fun HomeScreen() {
                         }
                     )
                     2 -> FileCryptoScreen(
+                        viewModel = cryptoViewModel,
                         onRequestMasterPasswordDialog = { callback ->
                             pendingMasterKeyCallback = callback
                             showMasterPassDialog = true

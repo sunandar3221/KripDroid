@@ -86,6 +86,7 @@ import com.kripdroid.app.ui.components.SectionTitle
 import com.kripdroid.app.ui.components.StatusBanner
 import com.kripdroid.app.ui.dialogs.InternalFilePickerDialog
 import com.kripdroid.app.ui.theme.SurfaceContainerHigh
+import com.kripdroid.app.viewmodel.CryptoViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -96,6 +97,7 @@ import java.io.FileInputStream
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FileCryptoScreen(
+    viewModel: CryptoViewModel,
     onRequestMasterPasswordDialog: (onSuccess: (String) -> Unit) -> Unit,
     onTriggerBiometrics: (onSuccess: (String) -> Unit) -> Unit,
     modifier: Modifier = Modifier
@@ -103,28 +105,28 @@ fun FileCryptoScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    var selectedAlgoId by remember { mutableStateOf("aes256gcm") }
+    var selectedAlgoId by viewModel::fileSelectedAlgoId
     val selectedAlgo = remember(selectedAlgoId) { CryptoAlgorithms.getAlgorithm(selectedAlgoId) }
 
-    var loadedUri by remember { mutableStateOf<Uri?>(null) }
-    var loadedFileName by remember { mutableStateOf("") }
-    var loadedFileSize by remember { mutableStateOf(0L) }
+    var loadedUri by viewModel::loadedUri
+    var loadedFileName by viewModel::loadedFileName
+    var loadedFileSize by viewModel::loadedFileSize
 
-    var processedOutputFile by remember { mutableStateOf<File?>(null) }
-    var processedResult by remember { mutableStateOf<FileProcessResult?>(null) }
-    var suggestedExportFileName by remember { mutableStateOf("") }
+    var processedOutputFile by viewModel::processedOutputFile
+    var processedResult by viewModel::processedResult
+    var suggestedExportFileName by viewModel::suggestedExportFileName
 
-    var keyText by remember { mutableStateOf("") }
-    var isKeyMasked by remember { mutableStateOf(false) }
-    var useDeviceKey by remember { mutableStateOf(false) }
+    var keyText by viewModel::fileKey
+    var isKeyMasked by viewModel::fileIsKeyMasked
+    var useDeviceKey by viewModel::fileUseDeviceKey
     var showInternalPicker by remember { mutableStateOf(false) }
     var showInternalSaveDialog by remember { mutableStateOf(false) }
 
-    var isProcessing by remember { mutableStateOf(false) }
-    var progress by remember { mutableFloatStateOf(0f) }
-    var progressStatusText by remember { mutableStateOf("") }
-    var statusMessage by remember { mutableStateOf("") }
-    var isError by remember { mutableStateOf(false) }
+    var isProcessing by viewModel::fileIsProcessing
+    var progress by viewModel::fileProgress
+    var progressStatusText by viewModel::fileProgressStatusText
+    var statusMessage by viewModel::fileStatusMessage
+    var isError by viewModel::fileIsError
 
     fun handleSelectedUri(uri: Uri) {
         coroutineScope.launch(Dispatchers.IO) {
@@ -691,12 +693,16 @@ fun FileCryptoScreen(
                         isError = true
                         return@Button
                     }
-                    if (useDeviceKey || KeystoreManager.isDeviceKey(keyText) || keyText.trim().isEmpty()) {
-                        onRequestMasterPasswordDialog { effectiveKey ->
-                            executeFileEncrypt(effectiveKey)
+                    if (selectedAlgo.needsKey) {
+                        if (useDeviceKey || KeystoreManager.isDeviceKey(keyText) || keyText.trim().isEmpty()) {
+                            onRequestMasterPasswordDialog { effectiveKey ->
+                                executeFileEncrypt(effectiveKey)
+                            }
+                        } else {
+                            executeFileEncrypt(keyText)
                         }
                     } else {
-                        executeFileEncrypt(keyText)
+                        executeFileEncrypt("")
                     }
                 },
                 enabled = !isProcessing,
@@ -727,12 +733,16 @@ fun FileCryptoScreen(
                         isError = true
                         return@Button
                     }
-                    if (useDeviceKey || KeystoreManager.isDeviceKey(keyText) || (selectedAlgo.needsKey && keyText.trim().isEmpty())) {
-                        onRequestMasterPasswordDialog { effectiveKey ->
-                            executeFileDecrypt(effectiveKey)
+                    if (selectedAlgo.needsKey) {
+                        if (useDeviceKey || KeystoreManager.isDeviceKey(keyText) || keyText.trim().isEmpty()) {
+                            onRequestMasterPasswordDialog { effectiveKey ->
+                                executeFileDecrypt(effectiveKey)
+                            }
+                        } else {
+                            executeFileDecrypt(keyText)
                         }
                     } else {
-                        executeFileDecrypt(keyText)
+                        executeFileDecrypt("")
                     }
                 },
                 enabled = !isProcessing,
